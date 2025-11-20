@@ -547,10 +547,27 @@ def train_ml_model(df, model_type='logistic'):
     X = df[score_cols].values
     y = (df['overall_score'] >= 4).astype(int).values
     
-    if len(np.unique(y)) < 2:
-        return {'error': 'Need both satisfied and unsatisfied responses'}
+    # Check class distribution
+    unique_classes, class_counts = np.unique(y, return_counts=True)
     
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+    if len(unique_classes) < 2:
+        satisfied_count = (y == 1).sum()
+        unsatisfied_count = (y == 0).sum()
+        return {
+            'error': f'Need both satisfied AND unsatisfied responses for ML training.\n\n'
+                    f'Current data:\n'
+                    f'  • Satisfied (score ≥ 4): {satisfied_count} responses\n'
+                    f'  • Unsatisfied (score < 4): {unsatisfied_count} responses\n\n'
+                    f'💡 Tip: To use ML, you need at least 1 response in each category.\n'
+                    f'Try collecting more diverse feedback!'
+        }
+    
+    # Adjust test_size if we have very few samples
+    test_size = 0.3 if len(df) >= 10 else 0.2
+    if len(df) < 5:
+        test_size = 1 / len(df)  # Leave one out
+    
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42, stratify=y)
     
     # Select model
     models = {
@@ -559,7 +576,7 @@ def train_ml_model(df, model_type='logistic'):
         'random_forest': RandomForestClassifier(random_state=42, n_estimators=100),
         'gradient_boosting': GradientBoostingClassifier(random_state=42),
         'svm': SVC(random_state=42, probability=True),
-        'knn': KNeighborsClassifier(n_neighbors=3),
+        'knn': KNeighborsClassifier(n_neighbors=min(3, len(df)-1)),
         'naive_bayes': GaussianNB()
     }
     
@@ -924,20 +941,26 @@ def admin_panel():
         if len(df) < 2:
             st.info("Need at least 2 responses for statistical analysis")
         else:
-            # Show saved interpretation FIRST if it exists
+            # Always show saved interpretation if it exists
             saved_interp = get_interpretation('statistics')
             if saved_interp:
-                with st.expander("📝 Your Previous Interpretation", expanded=False):
+                st.success("✅ You have a saved interpretation!")
+                with st.expander("📝 View Your Previous Interpretation", expanded=True):
+                    st.markdown("**Your Saved Analysis:**")
                     st.info(saved_interp)
-                    if st.button("🗑️ Clear Saved Interpretation", key="clear_stats_interp"):
-                        # Delete from database
-                        conn = sqlite3.connect(DB_FILE)
-                        c = conn.cursor()
-                        c.execute("DELETE FROM interpretations WHERE analysis_type='statistics'")
-                        conn.commit()
-                        conn.close()
-                        st.success("✓ Interpretation cleared!")
-                        st.rerun()
+                    col1, col2 = st.columns([1, 4])
+                    with col1:
+                        if st.button("🗑️ Delete", key="clear_stats_interp"):
+                            conn = sqlite3.connect(DB_FILE)
+                            c = conn.cursor()
+                            c.execute("DELETE FROM interpretations WHERE analysis_type='statistics'")
+                            conn.commit()
+                            conn.close()
+                            st.success("✓ Interpretation deleted!")
+                            st.rerun()
+                    with col2:
+                        st.caption("💡 Run analysis again to update your interpretation")
+                st.markdown("---")
             
             st.markdown("### 🎓 Select Statistical Methods")
             
@@ -1029,7 +1052,7 @@ def admin_panel():
         if len(df) < 3:
             st.info(f"Need at least 3 responses for ML analysis. Current responses: {len(df)}")
         else:
-            # Show saved ML interpretations if they exist
+            # Always show saved ML interpretations if they exist
             all_ml_interps = []
             for model_key in ML_MODELS.keys():
                 interp = get_interpretation(f'ml_{model_key}')
@@ -1037,19 +1060,22 @@ def admin_panel():
                     all_ml_interps.append((ML_MODELS[model_key]['name'], interp, model_key))
             
             if all_ml_interps:
-                with st.expander(f"📝 Your Previous ML Interpretations ({len(all_ml_interps)} saved)", expanded=False):
-                    for model_name, interp, model_key in all_ml_interps:
-                        st.markdown(f"**{model_name}:**")
+                st.success(f"✅ You have {len(all_ml_interps)} saved ML interpretation(s)!")
+                with st.expander(f"📝 View Your Previous ML Interpretations ({len(all_ml_interps)} saved)", expanded=True):
+                    for idx, (model_name, interp, model_key) in enumerate(all_ml_interps):
+                        st.markdown(f"### {idx+1}. {model_name}")
                         st.info(interp)
-                        if st.button(f"🗑️ Clear {model_name} Interpretation", key=f"clear_{model_key}"):
+                        if st.button(f"🗑️ Delete", key=f"clear_{model_key}"):
                             conn = sqlite3.connect(DB_FILE)
                             c = conn.cursor()
                             c.execute("DELETE FROM interpretations WHERE analysis_type=?", (f'ml_{model_key}',))
                             conn.commit()
                             conn.close()
-                            st.success("✓ Interpretation cleared!")
+                            st.success("✓ Interpretation deleted!")
                             st.rerun()
-                        st.markdown("---")
+                        if idx < len(all_ml_interps) - 1:
+                            st.markdown("---")
+                st.markdown("---")
             
             st.markdown("### 🎓 Select Machine Learning Model")
             
