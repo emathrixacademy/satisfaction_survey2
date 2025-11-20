@@ -411,6 +411,91 @@ def clear_all_responses():
     conn.commit()
     conn.close()
 
+def generate_synthetic_data(num_responses, satisfied_pct, diversity):
+    """Generate synthetic survey data for testing"""
+    import random
+    
+    # Names pool
+    first_names = ['Alex', 'Jordan', 'Taylor', 'Morgan', 'Casey', 'Riley', 'Avery', 'Quinn',
+                   'Jamie', 'Charlie', 'Sam', 'Drew', 'Blake', 'Sage', 'River', 'Dakota',
+                   'Phoenix', 'Skylar', 'Jesse', 'Kai', 'Rowan', 'Finley', 'Emerson', 'Parker']
+    
+    organizations = ['PSITE', 'ACM', 'IEEE', 'Tech Corp', 'Data Labs', 'AI Institute', 
+                    'Cloud Systems', 'Analytics Hub', 'Innovation Center', 'Research Group']
+    
+    gestures = {
+        5: {'label': 'Very Satisfied', 'emoji': '❤️'},
+        4: {'label': 'Satisfied', 'emoji': '👍'},
+        2: {'label': 'Unsatisfied', 'emoji': '👎'},
+        1: {'label': 'Very Unsatisfied', 'emoji': '☝️'}
+    }
+    
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    
+    for i in range(num_responses):
+        # Determine if this response should be satisfied
+        is_satisfied = random.random() < (satisfied_pct / 100)
+        
+        # Generate scores based on satisfaction and diversity
+        if diversity == 'Low':
+            # Low diversity - scores very similar
+            if is_satisfied:
+                base_score = random.choice([4, 5])
+                scores = [base_score + random.choice([0, 0, 0, 1, -1]) for _ in range(5)]
+            else:
+                base_score = random.choice([1, 2])
+                scores = [base_score + random.choice([0, 0, 0, 1, -1]) for _ in range(5)]
+        elif diversity == 'Medium':
+            # Medium diversity - some variation
+            if is_satisfied:
+                scores = [random.choice([3, 4, 4, 4, 5, 5]) for _ in range(5)]
+            else:
+                scores = [random.choice([1, 1, 2, 2, 2, 3]) for _ in range(5)]
+        else:  # High diversity
+            # High diversity - wide range
+            if is_satisfied:
+                scores = [random.randint(3, 5) for _ in range(5)]
+            else:
+                scores = [random.randint(1, 3) for _ in range(5)]
+        
+        # Clip scores to valid range
+        scores = [max(1, min(5, s)) for s in scores]
+        
+        # Occasionally add missing values
+        if random.random() < 0.1:  # 10% chance
+            scores[random.randint(0, 4)] = None
+        
+        # Generate response data
+        name = random.choice(first_names) + str(random.randint(1, 99))
+        org = random.choice(organizations)
+        overall_score = sum(s for s in scores if s is not None) / len([s for s in scores if s is not None])
+        
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        data = [timestamp, name, org]
+        
+        for score in scores:
+            if score is None:
+                data.extend(['No Answer', None, random.uniform(0.7, 0.9)])
+            else:
+                gesture_info = gestures[score]
+                data.extend([gesture_info['label'], score, random.uniform(0.85, 0.99)])
+        
+        data.append(overall_score)
+        
+        c.execute('''INSERT INTO responses (timestamp, name, organization, 
+                      q1_label, q1_score, q1_confidence,
+                      q2_label, q2_score, q2_confidence,
+                      q3_label, q3_score, q3_confidence,
+                      q4_label, q4_score, q4_confidence,
+                      q5_label, q5_score, q5_confidence,
+                      overall_score) 
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', data)
+    
+    conn.commit()
+    conn.close()
+
 def update_responses_with_cleaned(df_clean):
     """Update database with cleaned data"""
     conn = sqlite3.connect(DB_FILE)
@@ -787,6 +872,187 @@ def admin_panel():
                         clear_all_responses()
                         st.success("✓ All data cleared")
                         st.rerun()
+        
+        # Add upload and synthetic data options
+        st.markdown("---")
+        st.markdown("### 🧪 Testing & Data Options")
+        
+        tab_upload, tab_synthetic = st.tabs(["📤 Upload CSV", "🎲 Generate Synthetic Data"])
+        
+        with tab_upload:
+            st.markdown("#### Upload Your Own CSV Data")
+            st.info("💡 Upload a CSV file with survey responses to test the analysis features")
+            
+            uploaded_file = st.file_uploader("Choose a CSV file", type=['csv'])
+            
+            if uploaded_file:
+                try:
+                    upload_df = pd.read_csv(uploaded_file)
+                    st.success(f"✓ File uploaded! {len(upload_df)} rows found")
+                    st.dataframe(upload_df.head(), use_container_width=True)
+                    
+                    if st.button("📊 Import to Database"):
+                        # Import logic here - need to map columns
+                        st.warning("⚠️ CSV import feature - column mapping needed. Contact support for custom implementation.")
+                except Exception as e:
+                    st.error(f"Error reading CSV: {e}")
+        
+        with tab_synthetic:
+            st.markdown("#### Generate Synthetic Survey Data")
+            st.info("💡 Create realistic test data with diverse responses for testing ML and statistics")
+            
+            num_responses = st.slider("Number of responses to generate:", 10, 100, 30)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                satisfied_pct = st.slider("% Satisfied responses:", 0, 100, 60)
+            with col2:
+                diversity = st.select_slider("Response diversity:", 
+                                            options=['Low', 'Medium', 'High'], 
+                                            value='Medium')
+            
+            if st.button("🎲 Generate Synthetic Data", type="primary"):
+                generate_synthetic_data(num_responses, satisfied_pct, diversity)
+                st.success(f"✓ Generated {num_responses} synthetic responses!")
+                st.balloons()
+                st.rerun()
+        
+        # New section for testing
+        st.markdown("---")
+        st.markdown("### 🧪 Testing & Data Import")
+        
+        tab_upload, tab_synthetic = st.tabs(["📤 Upload CSV", "🎲 Generate Synthetic Data"])
+        
+        with tab_upload:
+            st.markdown("#### Upload Your Own CSV Data")
+            st.info("💡 Upload a CSV file with survey responses for testing. Must have columns: name, organization, q1_score through q5_score")
+            
+            uploaded_file = st.file_uploader("Choose CSV file", type=['csv'], key='csv_upload')
+            
+            if uploaded_file:
+                try:
+                    df_upload = pd.read_csv(uploaded_file)
+                    
+                    # Validate columns
+                    required_cols = ['name', 'organization', 'q1_score', 'q2_score', 'q3_score', 'q4_score', 'q5_score']
+                    missing_cols = [col for col in required_cols if col not in df_upload.columns]
+                    
+                    if missing_cols:
+                        st.error(f"❌ Missing required columns: {', '.join(missing_cols)}")
+                        st.info("Required columns: name, organization, q1_score, q2_score, q3_score, q4_score, q5_score")
+                    else:
+                        st.success(f"✓ Valid CSV with {len(df_upload)} rows")
+                        st.dataframe(df_upload.head(10))
+                        
+                        if st.button("📥 Import to Database", type="primary"):
+                            # Import each row
+                            for idx, row in df_upload.iterrows():
+                                responses = []
+                                for i in range(1, 6):
+                                    score = row[f'q{i}_score']
+                                    if pd.notna(score):
+                                        # Map score to label
+                                        if score >= 4.5:
+                                            label = 'Very Satisfied'
+                                        elif score >= 3.5:
+                                            label = 'Satisfied'
+                                        elif score >= 2.5:
+                                            label = 'Neutral'
+                                        elif score >= 1.5:
+                                            label = 'Unsatisfied'
+                                        else:
+                                            label = 'Very Unsatisfied'
+                                    else:
+                                        label = 'No Answer'
+                                        score = None
+                                    
+                                    responses.append({
+                                        'label': label,
+                                        'score': score,
+                                        'confidence': 0.95
+                                    })
+                                
+                                save_response(
+                                    str(row['name']),
+                                    str(row['organization']),
+                                    responses
+                                )
+                            
+                            st.success(f"✓ Imported {len(df_upload)} responses!")
+                            st.balloons()
+                            st.rerun()
+                
+                except Exception as e:
+                    st.error(f"❌ Error reading CSV: {str(e)}")
+        
+        with tab_synthetic:
+            st.markdown("#### Generate Synthetic Survey Data")
+            st.info("💡 Create fake survey responses for testing ML models and analysis")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                n_responses = st.number_input("Number of responses:", min_value=5, max_value=100, value=20)
+                satisfaction_rate = st.slider("Satisfaction rate (%):", 0, 100, 60)
+            
+            with col2:
+                variance = st.slider("Score variance:", 0.0, 2.0, 0.5, 0.1)
+                st.caption("Higher variance = more diverse responses")
+            
+            if st.button("🎲 Generate Synthetic Data", type="primary"):
+                # Generate synthetic data
+                synthetic_data = []
+                
+                names = ["Alice", "Bob", "Charlie", "Diana", "Eve", "Frank", "Grace", "Henry", "Iris", "Jack",
+                        "Kate", "Leo", "Maria", "Nathan", "Olivia", "Peter", "Quinn", "Rachel", "Sam", "Tina"]
+                orgs = ["Company A", "Company B", "University", "Government", "NGO", "Startup", "Corporation"]
+                
+                for i in range(n_responses):
+                    # Determine if this should be satisfied or not
+                    is_satisfied = np.random.random() < (satisfaction_rate / 100)
+                    
+                    if is_satisfied:
+                        # Generate high scores (3.5-5.0)
+                        base_score = np.random.uniform(3.5, 5.0)
+                    else:
+                        # Generate low scores (1.0-3.5)
+                        base_score = np.random.uniform(1.0, 3.5)
+                    
+                    # Generate 5 question scores with variance
+                    scores = []
+                    responses = []
+                    for _ in range(5):
+                        score = np.clip(base_score + np.random.normal(0, variance), 1.0, 5.0)
+                        score = round(score * 2) / 2  # Round to nearest 0.5
+                        scores.append(score)
+                        
+                        # Map to label
+                        if score >= 4.5:
+                            label = 'Very Satisfied'
+                        elif score >= 3.5:
+                            label = 'Satisfied'
+                        elif score >= 2.5:
+                            label = 'Neutral'
+                        elif score >= 1.5:
+                            label = 'Unsatisfied'
+                        else:
+                            label = 'Very Unsatisfied'
+                        
+                        responses.append({
+                            'label': label,
+                            'score': score,
+                            'confidence': np.random.uniform(0.85, 0.99)
+                        })
+                    
+                    # Save to database
+                    name = np.random.choice(names) + f" {i+1}"
+                    org = np.random.choice(orgs)
+                    save_response(name, org, responses)
+                
+                st.success(f"✓ Generated {n_responses} synthetic responses!")
+                st.info(f"Distribution: ~{satisfaction_rate}% satisfied, ~{100-satisfaction_rate}% unsatisfied")
+                st.balloons()
+                st.rerun()
     
     # ========== TAB 3: CLEAN DATA (ENHANCED) ==========
     with tab3:
@@ -1038,6 +1304,85 @@ def admin_panel():
                         if interpretation.strip():
                             word_count = len(interpretation.split())
                             st.caption(f"📝 {word_count} words")
+            
+            # Always show ALL saved interpretations at bottom (outside of analysis button)
+            st.markdown("---")
+            st.markdown("### 📚 All Saved Interpretations")
+            st.caption("💡 All your saved analysis notes appear here for easy reference")
+            
+            # Get all saved interpretations
+            saved_stats = get_interpretation('statistics')
+            
+            if saved_stats:
+                st.markdown("#### 📊 Statistical Analysis Notes")
+                st.info(saved_stats)
+                if st.button("🗑️ Delete Statistical Interpretation", key="del_stats_bottom"):
+                    conn = sqlite3.connect(DB_FILE)
+                    c = conn.cursor()
+                    c.execute("DELETE FROM interpretations WHERE analysis_type='statistics'")
+                    conn.commit()
+                    conn.close()
+                    st.success("✓ Deleted!")
+                    st.rerun()
+            
+            # Show ALL ML interpretations
+            ml_interps = []
+            for model_key in ML_MODELS.keys():
+                interp = get_interpretation(f'ml_{model_key}')
+                if interp:
+                    ml_interps.append((ML_MODELS[model_key]['name'], interp, model_key))
+            
+            if ml_interps:
+                st.markdown("#### 🤖 Machine Learning Notes")
+                for idx, (model_name, interp, model_key) in enumerate(ml_interps, 1):
+                    with st.expander(f"{idx}. {model_name}", expanded=False):
+                        st.info(interp)
+                        if st.button(f"🗑️ Delete", key=f"del_ml_{model_key}_bottom"):
+                            conn = sqlite3.connect(DB_FILE)
+                            c = conn.cursor()
+                            c.execute("DELETE FROM interpretations WHERE analysis_type=?", (f'ml_{model_key}',))
+                            conn.commit()
+                            conn.close()
+                            st.success("✓ Deleted!")
+                            st.rerun()
+            
+            if not saved_stats and not ml_interps:
+                st.info("📝 No saved interpretations yet. Run an analysis and save your notes!")
+            
+            # Always show interpretation history at bottom
+            st.markdown("---")
+            st.markdown("### 📚 Interpretation History")
+            
+            # Get all interpretations
+            conn = sqlite3.connect(DB_FILE)
+            c = conn.cursor()
+            c.execute("SELECT analysis_type, interpretation, timestamp FROM interpretations WHERE analysis_type = 'statistics' ORDER BY timestamp DESC")
+            all_interps = c.fetchall()
+            conn.close()
+            
+            if all_interps:
+                st.success(f"✅ {len(all_interps)} interpretation(s) saved")
+                
+                for idx, (analysis_type, interp, timestamp) in enumerate(all_interps):
+                    with st.container():
+                        col1, col2 = st.columns([5, 1])
+                        with col1:
+                            st.markdown(f"**📝 Saved: {timestamp}**")
+                        with col2:
+                            if st.button("🗑️ Delete", key=f"del_stat_{idx}"):
+                                conn = sqlite3.connect(DB_FILE)
+                                c = conn.cursor()
+                                c.execute("DELETE FROM interpretations WHERE analysis_type=? AND timestamp=?", 
+                                         (analysis_type, timestamp))
+                                conn.commit()
+                                conn.close()
+                                st.rerun()
+                        
+                        st.info(interp)
+                        if idx < len(all_interps) - 1:
+                            st.markdown("---")
+            else:
+                st.info("💡 No saved interpretations yet. Run analysis and save your interpretation above!")
     
     # ========== TAB 5: MACHINE LEARNING (ENHANCED) ==========
     with tab5:
@@ -1164,6 +1509,44 @@ def admin_panel():
                             if ml_interpretation.strip():
                                 word_count = len(ml_interpretation.split())
                                 st.caption(f"📝 {word_count} words")
+            
+            # Always show ML interpretation history at bottom
+            st.markdown("---")
+            st.markdown("### 📚 All ML Interpretation History")
+            
+            # Get all ML interpretations
+            conn = sqlite3.connect(DB_FILE)
+            c = conn.cursor()
+            c.execute("SELECT analysis_type, interpretation, timestamp FROM interpretations WHERE analysis_type LIKE 'ml_%' ORDER BY timestamp DESC")
+            all_ml_interps = c.fetchall()
+            conn.close()
+            
+            if all_ml_interps:
+                st.success(f"✅ {len(all_ml_interps)} ML interpretation(s) saved across all models")
+                
+                for idx, (analysis_type, interp, timestamp) in enumerate(all_ml_interps):
+                    model_key = analysis_type.replace('ml_', '')
+                    model_name = ML_MODELS.get(model_key, {}).get('name', model_key)
+                    
+                    with st.container():
+                        col1, col2 = st.columns([5, 1])
+                        with col1:
+                            st.markdown(f"**🤖 {model_name}** - {timestamp}")
+                        with col2:
+                            if st.button("🗑️ Delete", key=f"del_ml_{idx}"):
+                                conn = sqlite3.connect(DB_FILE)
+                                c = conn.cursor()
+                                c.execute("DELETE FROM interpretations WHERE analysis_type=? AND timestamp=?", 
+                                         (analysis_type, timestamp))
+                                conn.commit()
+                                conn.close()
+                                st.rerun()
+                        
+                        st.info(interp)
+                        if idx < len(all_ml_interps) - 1:
+                            st.markdown("---")
+            else:
+                st.info("💡 No saved ML interpretations yet. Train models and save your interpretations above!")
 
 # ============================================================================
 # SURVEY PAGE
