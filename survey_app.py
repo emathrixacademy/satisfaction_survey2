@@ -875,50 +875,6 @@ def admin_panel():
         
         # Add upload and synthetic data options
         st.markdown("---")
-        st.markdown("### 🧪 Testing & Data Options")
-        
-        tab_upload, tab_synthetic = st.tabs(["📤 Upload CSV", "🎲 Generate Synthetic Data"])
-        
-        with tab_upload:
-            st.markdown("#### Upload Your Own CSV Data")
-            st.info("💡 Upload a CSV file with survey responses to test the analysis features")
-            
-            uploaded_file = st.file_uploader("Choose a CSV file", type=['csv'])
-            
-            if uploaded_file:
-                try:
-                    upload_df = pd.read_csv(uploaded_file)
-                    st.success(f"✓ File uploaded! {len(upload_df)} rows found")
-                    st.dataframe(upload_df.head(), use_container_width=True)
-                    
-                    if st.button("📊 Import to Database"):
-                        # Import logic here - need to map columns
-                        st.warning("⚠️ CSV import feature - column mapping needed. Contact support for custom implementation.")
-                except Exception as e:
-                    st.error(f"Error reading CSV: {e}")
-        
-        with tab_synthetic:
-            st.markdown("#### Generate Synthetic Survey Data")
-            st.info("💡 Create realistic test data with diverse responses for testing ML and statistics")
-            
-            num_responses = st.slider("Number of responses to generate:", 10, 100, 30)
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                satisfied_pct = st.slider("% Satisfied responses:", 0, 100, 60)
-            with col2:
-                diversity = st.select_slider("Response diversity:", 
-                                            options=['Low', 'Medium', 'High'], 
-                                            value='Medium')
-            
-            if st.button("🎲 Generate Synthetic Data", type="primary"):
-                generate_synthetic_data(num_responses, satisfied_pct, diversity)
-                st.success(f"✓ Generated {num_responses} synthetic responses!")
-                st.balloons()
-                st.rerun()
-        
-        # New section for testing
-        st.markdown("---")
         st.markdown("### 🧪 Testing & Data Import")
         
         tab_upload, tab_synthetic = st.tabs(["📤 Upload CSV", "🎲 Generate Synthetic Data"])
@@ -999,7 +955,7 @@ def admin_panel():
                 variance = st.slider("Score variance:", 0.0, 2.0, 0.5, 0.1)
                 st.caption("Higher variance = more diverse responses")
             
-            if st.button("🎲 Generate Synthetic Data", type="primary"):
+            if st.button("🎲 Generate Synthetic Data", type="primary", key='generate_synthetic_main'):
                 # Generate synthetic data
                 synthetic_data = []
                 
@@ -1216,7 +1172,7 @@ def admin_panel():
                     st.info(saved_interp)
                     col1, col2 = st.columns([1, 4])
                     with col1:
-                        if st.button("🗑️ Delete", key="clear_stats_interp"):
+                        if st.button("🗑️ Delete", key="clear_stats_top"):
                             conn = sqlite3.connect(DB_FILE)
                             c = conn.cursor()
                             c.execute("DELETE FROM interpretations WHERE analysis_type='statistics'")
@@ -1410,7 +1366,7 @@ def admin_panel():
                     for idx, (model_name, interp, model_key) in enumerate(all_ml_interps):
                         st.markdown(f"### {idx+1}. {model_name}")
                         st.info(interp)
-                        if st.button(f"🗑️ Delete", key=f"clear_{model_key}"):
+                        if st.button(f"🗑️ Delete", key=f"clear_top_{model_key}"):
                             conn = sqlite3.connect(DB_FILE)
                             c = conn.cursor()
                             c.execute("DELETE FROM interpretations WHERE analysis_type=?", (f'ml_{model_key}',))
