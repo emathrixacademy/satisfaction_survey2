@@ -411,6 +411,28 @@ def clear_all_responses():
     conn.commit()
     conn.close()
 
+def update_responses_with_cleaned(df_clean):
+    """Update database with cleaned data"""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    
+    score_cols = ['q1_score', 'q2_score', 'q3_score', 'q4_score', 'q5_score']
+    
+    for idx, row in df_clean.iterrows():
+        # Recalculate overall score
+        scores = [row[col] for col in score_cols if pd.notna(row[col])]
+        overall_score = sum(scores) / len(scores) if scores else None
+        
+        # Update the record
+        c.execute('''UPDATE responses 
+                     SET q1_score=?, q2_score=?, q3_score=?, q4_score=?, q5_score=?, overall_score=?
+                     WHERE id=?''',
+                  (row['q1_score'], row['q2_score'], row['q3_score'], 
+                   row['q4_score'], row['q5_score'], overall_score, row['id']))
+    
+    conn.commit()
+    conn.close()
+
 # ============================================================================
 # ENHANCED CLEANING FUNCTIONS
 # ============================================================================
@@ -768,14 +790,23 @@ def admin_panel():
                 missing = df[col].isnull().sum()
                 missing_counts[col] = missing
             
-            if sum(missing_counts.values()) > 0:
-                st.warning(f"Found {sum(missing_counts.values())} missing values")
-                for col, count in missing_counts.items():
-                    if count > 0:
-                        st.write(f"  - {col}: {count} missing")
-            else:
-                st.success("✓ No missing values!")
+            total_missing = sum(missing_counts.values())
             
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                if total_missing > 0:
+                    st.warning(f"⚠️ Found {total_missing} missing values")
+                    for col, count in missing_counts.items():
+                        if count > 0:
+                            st.write(f"  - {col}: {count} missing")
+                else:
+                    st.success("✓ No missing values in database!")
+            
+            with col2:
+                st.metric("Total Missing", total_missing)
+                st.metric("Total Responses", len(df))
+            
+            st.markdown("---")
             st.markdown("### 🎓 Select Imputation Strategy")
             
             strategy = st.selectbox(
@@ -797,27 +828,92 @@ def admin_panel():
             if strategy == 'group_mean':
                 if 'organization' in df.columns:
                     group_col = 'organization'
-                    st.info(f"Will use group means by: {group_col}")
+                    st.info(f"📊 Will use group means by: {group_col}")
             
-            col1, col2 = st.columns(2)
+            st.markdown("---")
+            
+            # Action buttons
+            col1, col2, col3 = st.columns(3)
             
             with col1:
-                if st.button("🔄 Apply Imputation", type="primary"):
-                    df_clean = apply_imputation(df, strategy, constant_value, group_col)
+                if st.button("🔄 Preview Cleaned Data", type="primary"):
+                    st.session_state.cleaned_df = apply_imputation(df, strategy, constant_value, group_col)
+                    st.session_state.cleaning_applied = True
                     st.success(f"✓ Applied {IMPUTATION_STRATEGIES[strategy]['name']}!")
-                    st.dataframe(df_clean[score_cols].describe())
             
             with col2:
-                if st.button("💾 Export Cleaned Data"):
-                    df_clean = apply_imputation(df, strategy, constant_value, group_col)
-                    csv = df_clean.to_csv(index=False)
+                if st.button("💾 Save to Database"):
+                    if 'cleaned_df' in st.session_state and st.session_state.get('cleaning_applied'):
+                        update_responses_with_cleaned(st.session_state.cleaned_df)
+                        st.success("✓ Cleaned data saved to database!")
+                        st.info("ℹ️ Refresh the page to see updated data everywhere")
+                        # Clear the session state
+                        del st.session_state.cleaned_df
+                        st.session_state.cleaning_applied = False
+                        st.rerun()
+                    else:
+                        st.warning("⚠️ Please preview cleaned data first!")
+            
+            with col3:
+                if 'cleaned_df' in st.session_state and st.session_state.get('cleaning_applied'):
+                    csv = st.session_state.cleaned_df.to_csv(index=False)
                     st.download_button(
-                        "Download Cleaned CSV",
+                        "📥 Download CSV",
                         csv,
                         f"cleaned_data_{strategy}.csv",
                         "text/csv",
                         key='download-cleaned'
                     )
+            
+            # Display comparison
+            if 'cleaned_df' in st.session_state and st.session_state.get('cleaning_applied'):
+                st.markdown("---")
+                st.markdown("### 📊 Data Comparison")
+                
+                tab_before, tab_after, tab_stats = st.tabs(["Before Cleaning", "After Cleaning", "Statistics"])
+                
+                with tab_before:
+                    st.markdown("#### Original Data (with missing values)")
+                    st.dataframe(df[['id', 'name', 'organization'] + score_cols + ['overall_score']], 
+                                use_container_width=True)
+                    
+                    st.markdown("##### Missing Value Summary")
+                    for col, count in missing_counts.items():
+                        if count > 0:
+                            st.write(f"- {col}: {count} missing ({count/len(df)*100:.1f}%)")
+                
+                with tab_after:
+                    st.markdown("#### Cleaned Data (no missing values)")
+                    st.dataframe(st.session_state.cleaned_df[['id', 'name', 'organization'] + score_cols + ['overall_score']], 
+                                use_container_width=True)
+                    
+                    # Count remaining missing (should be 0)
+                    remaining_missing = st.session_state.cleaned_df[score_cols].isnull().sum().sum()
+                    if remaining_missing == 0:
+                        st.success("✓ All missing values have been filled!")
+                    else:
+                        st.warning(f"⚠️ {remaining_missing} missing values remaining")
+                
+                with tab_stats:
+                    st.markdown("#### Statistical Comparison")
+                    
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("**Before Cleaning**")
+                        st.dataframe(df[score_cols].describe())
+                    
+                    with col2:
+                        st.markdown("**After Cleaning**")
+                        st.dataframe(st.session_state.cleaned_df[score_cols].describe())
+                    
+                    st.markdown("##### Changes Summary")
+                    for col in score_cols:
+                        before_mean = df[col].mean()
+                        after_mean = st.session_state.cleaned_df[col].mean()
+                        if pd.notna(before_mean) and pd.notna(after_mean):
+                            diff = after_mean - before_mean
+                            st.write(f"**{col}**: {before_mean:.2f} → {after_mean:.2f} (change: {diff:+.2f})")
     
     # ========== TAB 4: STATISTICS (ENHANCED) ==========
     with tab4:
@@ -828,6 +924,21 @@ def admin_panel():
         if len(df) < 2:
             st.info("Need at least 2 responses for statistical analysis")
         else:
+            # Show saved interpretation FIRST if it exists
+            saved_interp = get_interpretation('statistics')
+            if saved_interp:
+                with st.expander("📝 Your Previous Interpretation", expanded=False):
+                    st.info(saved_interp)
+                    if st.button("🗑️ Clear Saved Interpretation", key="clear_stats_interp"):
+                        # Delete from database
+                        conn = sqlite3.connect(DB_FILE)
+                        c = conn.cursor()
+                        c.execute("DELETE FROM interpretations WHERE analysis_type='statistics'")
+                        conn.commit()
+                        conn.close()
+                        st.success("✓ Interpretation cleared!")
+                        st.rerun()
+            
             st.markdown("### 🎓 Select Statistical Methods")
             
             methods = st.multiselect(
@@ -878,16 +989,32 @@ def admin_panel():
                     st.pyplot(fig)
                     
                     # Interpretation box
-                    st.markdown("### 📝 Your Interpretation")
+                    st.markdown("---")
+                    st.markdown("### 📝 Add Your Interpretation")
+                    st.info("💡 Write your observations, insights, and conclusions from the analysis above. This will be saved and appear at the top when you return!")
+                    
                     interpretation = st.text_area(
-                        "Add your interpretation of the statistical results:",
+                        "Your interpretation:",
                         value=get_interpretation('statistics'),
-                        height=150,
-                        key='stats_interp'
+                        height=200,
+                        key='stats_interp',
+                        placeholder="Example: The overall satisfaction mean is 4.2/5.0, indicating high satisfaction. Q1 and Q2 show strong positive correlation (r=0.85), suggesting content quality and instructor teaching are closely related..."
                     )
-                    if st.button("💾 Save Interpretation", key='save_stats'):
-                        save_interpretation('statistics', interpretation)
-                        st.success("✓ Interpretation saved!")
+                    
+                    col1, col2 = st.columns([1, 3])
+                    with col1:
+                        if st.button("💾 Save Interpretation", key='save_stats', type="primary"):
+                            if interpretation.strip():
+                                save_interpretation('statistics', interpretation)
+                                st.success("✓ Interpretation saved! It will appear at the top next time.")
+                                st.balloons()
+                            else:
+                                st.warning("⚠️ Please write an interpretation first!")
+                    
+                    with col2:
+                        if interpretation.strip():
+                            word_count = len(interpretation.split())
+                            st.caption(f"📝 {word_count} words")
     
     # ========== TAB 5: MACHINE LEARNING (ENHANCED) ==========
     with tab5:
@@ -899,9 +1026,31 @@ def admin_panel():
         
         df = get_all_responses()
         
-        if len(df) < 5:
-            st.info(f"Need at least 5 responses for ML analysis. Current responses: {len(df)}")
+        if len(df) < 3:
+            st.info(f"Need at least 3 responses for ML analysis. Current responses: {len(df)}")
         else:
+            # Show saved ML interpretations if they exist
+            all_ml_interps = []
+            for model_key in ML_MODELS.keys():
+                interp = get_interpretation(f'ml_{model_key}')
+                if interp:
+                    all_ml_interps.append((ML_MODELS[model_key]['name'], interp, model_key))
+            
+            if all_ml_interps:
+                with st.expander(f"📝 Your Previous ML Interpretations ({len(all_ml_interps)} saved)", expanded=False):
+                    for model_name, interp, model_key in all_ml_interps:
+                        st.markdown(f"**{model_name}:**")
+                        st.info(interp)
+                        if st.button(f"🗑️ Clear {model_name} Interpretation", key=f"clear_{model_key}"):
+                            conn = sqlite3.connect(DB_FILE)
+                            c = conn.cursor()
+                            c.execute("DELETE FROM interpretations WHERE analysis_type=?", (f'ml_{model_key}',))
+                            conn.commit()
+                            conn.close()
+                            st.success("✓ Interpretation cleared!")
+                            st.rerun()
+                        st.markdown("---")
+            
             st.markdown("### 🎓 Select Machine Learning Model")
             
             model_type = st.selectbox(
@@ -962,16 +1111,33 @@ def admin_panel():
                             st.pyplot(fig)
                         
                         # Interpretation box
-                        st.markdown("### 📝 Your ML Interpretation")
+                        # Interpretation box
+                        st.markdown("---")
+                        st.markdown("### 📝 Add Your ML Interpretation")
+                        st.info(f"💡 Write your observations about the {ML_MODELS[model_type]['name']} results. This will be saved and appear at the top!")
+                        
                         ml_interpretation = st.text_area(
-                            "Add your interpretation of the ML results:",
+                            f"Your interpretation for {ML_MODELS[model_type]['name']}:",
                             value=get_interpretation(f'ml_{model_type}'),
-                            height=150,
-                            key='ml_interp'
+                            height=200,
+                            key='ml_interp',
+                            placeholder=f"Example: The {ML_MODELS[model_type]['name']} achieved 85% accuracy. Q1 (content) was the most important feature, followed by Q2 (instructor). This suggests..."
                         )
-                        if st.button("💾 Save ML Interpretation"):
-                            save_interpretation(f'ml_{model_type}', ml_interpretation)
-                            st.success("✓ Interpretation saved!")
+                        
+                        col1, col2 = st.columns([1, 3])
+                        with col1:
+                            if st.button("💾 Save Interpretation", key='save_ml', type="primary"):
+                                if ml_interpretation.strip():
+                                    save_interpretation(f'ml_{model_type}', ml_interpretation)
+                                    st.success("✓ Interpretation saved! Check 'Previous Interpretations' above.")
+                                    st.balloons()
+                                else:
+                                    st.warning("⚠️ Please write an interpretation first!")
+                        
+                        with col2:
+                            if ml_interpretation.strip():
+                                word_count = len(ml_interpretation.split())
+                                st.caption(f"📝 {word_count} words")
 
 # ============================================================================
 # SURVEY PAGE
