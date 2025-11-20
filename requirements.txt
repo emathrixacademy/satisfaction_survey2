@@ -2,6 +2,7 @@ streamlit
 pandas
 numpy
 Pillow
-gspread
-google-auth
-google-auth-oauthlib
+scikit-learn
+scipy
+matplotlib
+seaborn
