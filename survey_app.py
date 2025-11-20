@@ -43,7 +43,7 @@ except:
 
 st.set_page_config(
     page_title="Touchless Survey System",
-    page_icon="✋",
+    page_icon="âœ‹",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -65,11 +65,11 @@ SURVEY_QUESTIONS = [
 
 # Gesture mapping
 GESTURE_MAP = {
-    'thumbs_up': {'label': 'Satisfied', 'score': 4, 'emoji': '👍'},
-    'heart_sign': {'label': 'Very Satisfied', 'score': 5, 'emoji': '❤️'},
-    'thumbs_down': {'label': 'Unsatisfied', 'score': 2, 'emoji': '👎'},
-    'waving_finger': {'label': 'Very Unsatisfied', 'score': 1, 'emoji': '☝️'},
-    'closed_fist': {'label': 'No Answer', 'score': None, 'emoji': '✊'}
+    'thumbs_up': {'label': 'Satisfied', 'score': 4, 'emoji': 'ðŸ‘'},
+    'heart_sign': {'label': 'Very Satisfied', 'score': 5, 'emoji': 'â¤ï¸'},
+    'thumbs_down': {'label': 'Unsatisfied', 'score': 2, 'emoji': 'ðŸ‘Ž'},
+    'waving_finger': {'label': 'Very Unsatisfied', 'score': 1, 'emoji': 'â˜ï¸'},
+    'closed_fist': {'label': 'No Answer', 'score': None, 'emoji': 'âœŠ'}
 }
 
 # ============================================================================
@@ -130,7 +130,14 @@ def save_response(name, org, responses):
     
     data.append(overall_score)
     
-    c.execute('''INSERT INTO responses VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', data)
+    c.execute('''INSERT INTO responses (timestamp, name, organization, 
+                  q1_label, q1_score, q1_confidence,
+                  q2_label, q2_score, q2_confidence,
+                  q3_label, q3_score, q3_confidence,
+                  q4_label, q4_score, q4_confidence,
+                  q5_label, q5_score, q5_confidence,
+                  overall_score) 
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', data)
     conn.commit()
     conn.close()
 
@@ -374,40 +381,40 @@ def simple_predict(image):
 
 def admin_panel():
     """Admin panel for configuration and data management"""
-    st.title("🔧 Admin Panel")
+    st.title("ðŸ”§ Admin Panel")
     
     # Check admin authentication
     if 'admin_authenticated' not in st.session_state:
         st.session_state.admin_authenticated = False
     
     if not st.session_state.admin_authenticated:
-        st.subheader("🔐 Admin Login")
+        st.subheader("ðŸ” Admin Login")
         password = st.text_input("Enter Admin Password:", type="password")
         
         if st.button("Login"):
             stored_password = get_setting('admin_password', DEFAULT_ADMIN_PASSWORD)
             if password == stored_password:
                 st.session_state.admin_authenticated = True
-                st.success("✓ Authenticated!")
+                st.success("âœ“ Authenticated!")
                 st.rerun()
             else:
-                st.error("✗ Incorrect password")
+                st.error("âœ— Incorrect password")
         
         st.info("Default password: admin123")
         return
     
     # Logout button
-    if st.button("🚪 Logout"):
+    if st.button("ðŸšª Logout"):
         st.session_state.admin_authenticated = False
         st.rerun()
     
     # Tabs for different admin functions
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "⚙️ Settings", 
-        "📊 View Data", 
-        "🧹 Clean Data", 
-        "📈 Statistics", 
-        "🤖 Machine Learning"
+        "âš™ï¸ Settings", 
+        "ðŸ“Š View Data", 
+        "ðŸ§¹ Clean Data", 
+        "ðŸ“ˆ Statistics", 
+        "ðŸ¤– Machine Learning"
     ])
     
     # ========== TAB 1: SETTINGS ==========
@@ -415,7 +422,7 @@ def admin_panel():
         st.subheader("Application Settings")
         
         # Teachable Machine Model URL
-        st.markdown("### 🎯 Teachable Machine Model")
+        st.markdown("### ðŸŽ¯ Teachable Machine Model")
         current_model_url = get_setting('model_url', '')
         model_url = st.text_input(
             "Teachable Machine Shareable Link:",
@@ -423,33 +430,33 @@ def admin_panel():
             help="Paste your Teachable Machine model share link here"
         )
         
-        if st.button("💾 Save Model URL"):
+        if st.button("ðŸ’¾ Save Model URL"):
             save_setting('model_url', model_url)
-            st.success("✓ Model URL saved!")
+            st.success("âœ“ Model URL saved!")
             st.info(f"Model: {model_url}")
         
         # Admin Password
-        st.markdown("### 🔑 Change Admin Password")
+        st.markdown("### ðŸ”‘ Change Admin Password")
         new_password = st.text_input("New Password:", type="password")
         confirm_password = st.text_input("Confirm Password:", type="password")
         
-        if st.button("🔄 Update Password"):
+        if st.button("ðŸ”„ Update Password"):
             if new_password == confirm_password:
                 save_setting('admin_password', new_password)
-                st.success("✓ Password updated!")
+                st.success("âœ“ Password updated!")
             else:
-                st.error("✗ Passwords don't match")
+                st.error("âœ— Passwords don't match")
         
         # Survey Settings
-        st.markdown("### 📋 Survey Settings")
+        st.markdown("### ðŸ“‹ Survey Settings")
         survey_title = st.text_input("Survey Title:", value=get_setting('survey_title', 'Touchless Satisfaction Survey'))
-        if st.button("💾 Save Title"):
+        if st.button("ðŸ’¾ Save Title"):
             save_setting('survey_title', survey_title)
-            st.success("✓ Title saved!")
+            st.success("âœ“ Title saved!")
     
     # ========== TAB 2: VIEW DATA ==========
     with tab2:
-        st.subheader("📊 Survey Responses")
+        st.subheader("ðŸ“Š Survey Responses")
         
         df = get_all_responses()
         
@@ -464,7 +471,7 @@ def admin_panel():
             # Download button
             csv = df.to_csv(index=False)
             st.download_button(
-                "📥 Download CSV",
+                "ðŸ“¥ Download CSV",
                 csv,
                 "survey_responses.csv",
                 "text/csv",
@@ -472,26 +479,26 @@ def admin_panel():
             )
             
             # Delete options
-            st.markdown("### 🗑️ Data Management")
+            st.markdown("### ðŸ—‘ï¸ Data Management")
             col1, col2 = st.columns(2)
             
             with col1:
                 response_id = st.number_input("Delete Response ID:", min_value=1, step=1)
-                if st.button("🗑️ Delete Response"):
+                if st.button("ðŸ—‘ï¸ Delete Response"):
                     delete_response(response_id)
-                    st.success(f"✓ Deleted response {response_id}")
+                    st.success(f"âœ“ Deleted response {response_id}")
                     st.rerun()
             
             with col2:
-                if st.button("⚠️ Clear All Data", type="secondary"):
+                if st.button("âš ï¸ Clear All Data", type="secondary"):
                     if st.checkbox("Confirm deletion"):
                         clear_all_responses()
-                        st.success("✓ All data cleared")
+                        st.success("âœ“ All data cleared")
                         st.rerun()
     
     # ========== TAB 3: CLEAN DATA ==========
     with tab3:
-        st.subheader("🧹 Data Cleaning")
+        st.subheader("ðŸ§¹ Data Cleaning")
         
         df = get_all_responses()
         
@@ -514,7 +521,7 @@ def admin_panel():
                     if count > 0:
                         st.write(f"  - {col}: {count} missing")
             else:
-                st.success("✓ No missing values!")
+                st.success("âœ“ No missing values!")
             
             # Cleaning options
             st.markdown("### Cleaning Strategies")
@@ -522,18 +529,18 @@ def admin_panel():
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                if st.button("🔄 Impute with Median"):
+                if st.button("ðŸ”„ Impute with Median"):
                     df_clean = clean_data(df)
-                    st.success("✓ Data cleaned with median imputation")
+                    st.success("âœ“ Data cleaned with median imputation")
                     st.dataframe(df_clean[score_cols].describe())
             
             with col2:
-                if st.button("📊 Show Statistics"):
+                if st.button("ðŸ“Š Show Statistics"):
                     st.write("Before cleaning:")
                     st.dataframe(df[score_cols].describe())
             
             with col3:
-                if st.button("💾 Export Cleaned Data"):
+                if st.button("ðŸ’¾ Export Cleaned Data"):
                     df_clean = clean_data(df)
                     csv = df_clean.to_csv(index=False)
                     st.download_button(
@@ -545,14 +552,14 @@ def admin_panel():
     
     # ========== TAB 4: STATISTICS ==========
     with tab4:
-        st.subheader("📈 Statistical Analysis")
+        st.subheader("ðŸ“ˆ Statistical Analysis")
         
         df = get_all_responses()
         
         if len(df) < 2:
             st.info("Need at least 2 responses for statistical analysis")
         else:
-            if st.button("🔬 Run Statistical Analysis"):
+            if st.button("ðŸ”¬ Run Statistical Analysis"):
                 with st.spinner("Analyzing..."):
                     df_clean = clean_data(df)
                     results = perform_statistical_analysis(df_clean)
@@ -577,19 +584,19 @@ def admin_panel():
                     st.pyplot(fig)
                     
                     # Interpretation box
-                    st.markdown("### 📝 Your Interpretation")
+                    st.markdown("### ðŸ“ Your Interpretation")
                     interpretation = st.text_area(
                         "Add your interpretation of the statistical results:",
                         value=get_interpretation('statistics'),
                         height=150
                     )
-                    if st.button("💾 Save Interpretation"):
+                    if st.button("ðŸ’¾ Save Interpretation"):
                         save_interpretation('statistics', interpretation)
-                        st.success("✓ Interpretation saved!")
+                        st.success("âœ“ Interpretation saved!")
     
     # ========== TAB 5: MACHINE LEARNING ==========
     with tab5:
-        st.subheader("🤖 Machine Learning Analysis")
+        st.subheader("ðŸ¤– Machine Learning Analysis")
         
         if not ML_AVAILABLE:
             st.error("ML libraries not available. Install scikit-learn, scipy, matplotlib, seaborn")
@@ -601,13 +608,13 @@ def admin_panel():
             st.info("Need at least 3 responses for ML analysis")
             st.write(f"Current responses: {len(df)}")
         else:
-            if st.button("🚀 Run ML Analysis"):
+            if st.button("ðŸš€ Run ML Analysis"):
                 with st.spinner("Training models..."):
                     df_clean = clean_data(df)
                     results = perform_ml_analysis(df_clean)
                     
                     # Display results
-                    st.markdown("### 📊 Dataset Info")
+                    st.markdown("### ðŸ“Š Dataset Info")
                     col1, col2 = st.columns(2)
                     with col1:
                         st.metric("Samples", results['n_samples'])
@@ -616,7 +623,7 @@ def admin_panel():
                     
                     # PCA Results
                     if 'pca' in results:
-                        st.markdown("### 🔍 Principal Component Analysis")
+                        st.markdown("### ðŸ” Principal Component Analysis")
                         pca_df = pd.DataFrame({
                             'Component': [f'PC{i+1}' for i in range(len(results['pca']['explained_variance']))],
                             'Explained Variance': results['pca']['explained_variance'],
@@ -626,7 +633,7 @@ def admin_panel():
                     
                     # Classification Results
                     if 'classification' in results:
-                        st.markdown("### 🎯 Classification Model Performance")
+                        st.markdown("### ðŸŽ¯ Classification Model Performance")
                         metrics_df = pd.DataFrame({
                             'Metric': ['Accuracy', 'Precision', 'Recall', 'F1-Score'],
                             'Value': [
@@ -638,7 +645,7 @@ def admin_panel():
                         })
                         st.dataframe(metrics_df)
                         
-                        st.markdown("### 📊 Feature Importance")
+                        st.markdown("### ðŸ“Š Feature Importance")
                         importance_df = pd.DataFrame(
                             results['classification']['feature_importance'].items(),
                             columns=['Question', 'Importance']
@@ -646,15 +653,15 @@ def admin_panel():
                         st.dataframe(importance_df)
                     
                     # Interpretation box
-                    st.markdown("### 📝 Your ML Interpretation")
+                    st.markdown("### ðŸ“ Your ML Interpretation")
                     ml_interpretation = st.text_area(
                         "Add your interpretation of the ML results:",
                         value=get_interpretation('machine_learning'),
                         height=150
                     )
-                    if st.button("💾 Save ML Interpretation"):
+                    if st.button("ðŸ’¾ Save ML Interpretation"):
                         save_interpretation('machine_learning', ml_interpretation)
-                        st.success("✓ Interpretation saved!")
+                        st.success("âœ“ Interpretation saved!")
 
 # ============================================================================
 # SURVEY PAGE
@@ -663,19 +670,19 @@ def admin_panel():
 def survey_page():
     """Main survey interface"""
     survey_title = get_setting('survey_title', 'Touchless Satisfaction Survey')
-    st.title(f"✋ {survey_title}")
+    st.title(f"âœ‹ {survey_title}")
     
     # Sidebar
     with st.sidebar:
-        st.header("📋 Instructions")
+        st.header("ðŸ“‹ Instructions")
         st.markdown("""
         **Gesture Guide:**
         
-        ❤️ Heart = Very Satisfied (5)
-        👍 Thumbs Up = Satisfied (4)  
-        👎 Thumbs Down = Unsatisfied (2)
-        ☝️ Waving = Very Unsatisfied (1)
-        ✊ Fist = No Answer
+        â¤ï¸ Heart = Very Satisfied (5)
+        ðŸ‘ Thumbs Up = Satisfied (4)  
+        ðŸ‘Ž Thumbs Down = Unsatisfied (2)
+        â˜ï¸ Waving = Very Unsatisfied (1)
+        âœŠ Fist = No Answer
         """)
         
         st.info("Show clear hand gestures for best results!")
@@ -697,7 +704,7 @@ def survey_page():
         with col2:
             org = st.text_input("Organization:")
         
-        if st.button("🚀 Start Survey", type="primary"):
+        if st.button("ðŸš€ Start Survey", type="primary"):
             st.session_state.name = name or "Anonymous"
             st.session_state.org = org or "N/A"
             st.session_state.started = True
@@ -706,7 +713,7 @@ def survey_page():
     
     # Completed screen
     if st.session_state.completed:
-        st.success("✅ Survey Complete!")
+        st.success("âœ… Survey Complete!")
         
         st.markdown("## Your Responses")
         
@@ -724,7 +731,7 @@ def survey_page():
             avg_score = sum(scores)/len(scores)
             st.metric("Average Score", f"{avg_score:.2f}/5.0")
         
-        if st.button("📝 New Response"):
+        if st.button("ðŸ“ New Response"):
             st.session_state.started = False
             st.session_state.current_q = 0
             st.session_state.responses = []
@@ -757,7 +764,7 @@ def survey_page():
             st.success(f"Detected: {info['emoji']} {info['label']}")
             st.info(f"Confidence: {confidence:.1%}")
             
-            if st.button("✅ Confirm", type="primary"):
+            if st.button("âœ… Confirm", type="primary"):
                 st.session_state.responses.append({
                     'label': info['label'],
                     'score': info['score'],
@@ -797,12 +804,12 @@ def main():
         st.markdown("---")
         page = st.radio(
             "Navigation",
-            ["📝 Survey", "🔧 Admin Panel"],
+            ["ðŸ“ Survey", "ðŸ”§ Admin Panel"],
             label_visibility="collapsed"
         )
     
     # Route to appropriate page
-    if page == "📝 Survey":
+    if page == "ðŸ“ Survey":
         survey_page()
     else:
         admin_panel()
