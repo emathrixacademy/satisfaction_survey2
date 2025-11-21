@@ -1251,8 +1251,9 @@ def admin_panel():
                         if st.button("💾 Save Interpretation", key='save_stats', type="primary"):
                             if interpretation.strip():
                                 save_interpretation('statistics', interpretation)
-                                st.success("✓ Interpretation saved! It will appear at the top next time.")
+                                st.success("✓ Interpretation saved! Scroll down to see it.")
                                 st.balloons()
+                                st.rerun()  # Refresh to show in "All Saved Interpretations"
                             else:
                                 st.warning("⚠️ Please write an interpretation first!")
                     
@@ -1456,8 +1457,9 @@ def admin_panel():
                             if st.button("💾 Save Interpretation", key='save_ml', type="primary"):
                                 if ml_interpretation.strip():
                                     save_interpretation(f'ml_{model_type}', ml_interpretation)
-                                    st.success("✓ Interpretation saved! Check 'Previous Interpretations' above.")
+                                    st.success("✓ Interpretation saved! Scroll to see it above.")
                                     st.balloons()
+                                    st.rerun()  # Refresh to show in "Previous Interpretations"
                                 else:
                                     st.warning("⚠️ Please write an interpretation first!")
                         
