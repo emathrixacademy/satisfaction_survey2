@@ -8,6 +8,7 @@
 # - Multiple ML models with learning descriptions
 # - Built-in SQLite database
 # - Teachable Machine integration
+# - FIXED: Saved interpretations now always visible (not hidden inside button)
 # ============================================================================
 
 import streamlit as st
@@ -328,7 +329,7 @@ def save_response(name, org, responses):
     scores = [r['score'] for r in responses if r['score'] is not None]
     overall_score = sum(scores) / len(scores) if scores else None
     
-    # Prepare data - 19 values total
+    # Prepare data
     data = [
         datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         name,
@@ -415,13 +416,10 @@ def generate_synthetic_data(num_responses, satisfied_pct, diversity):
     """Generate synthetic survey data for testing"""
     import random
     
-    # Names pool
     first_names = ['Alex', 'Jordan', 'Taylor', 'Morgan', 'Casey', 'Riley', 'Avery', 'Quinn',
-                   'Jamie', 'Charlie', 'Sam', 'Drew', 'Blake', 'Sage', 'River', 'Dakota',
-                   'Phoenix', 'Skylar', 'Jesse', 'Kai', 'Rowan', 'Finley', 'Emerson', 'Parker']
+                   'Jamie', 'Charlie', 'Sam', 'Drew', 'Blake', 'Sage', 'River', 'Dakota']
     
-    organizations = ['PSITE', 'ACM', 'IEEE', 'Tech Corp', 'Data Labs', 'AI Institute', 
-                    'Cloud Systems', 'Analytics Hub', 'Innovation Center', 'Research Group']
+    organizations = ['PSITE', 'ACM', 'IEEE', 'Tech Corp', 'Data Labs', 'AI Institute']
     
     gestures = {
         5: {'label': 'Very Satisfied', 'emoji': '❤️'},
@@ -434,12 +432,9 @@ def generate_synthetic_data(num_responses, satisfied_pct, diversity):
     c = conn.cursor()
     
     for i in range(num_responses):
-        # Determine if this response should be satisfied
         is_satisfied = random.random() < (satisfied_pct / 100)
         
-        # Generate scores based on satisfaction and diversity
         if diversity == 'Low':
-            # Low diversity - scores very similar
             if is_satisfied:
                 base_score = random.choice([4, 5])
                 scores = [base_score + random.choice([0, 0, 0, 1, -1]) for _ in range(5)]
@@ -447,26 +442,21 @@ def generate_synthetic_data(num_responses, satisfied_pct, diversity):
                 base_score = random.choice([1, 2])
                 scores = [base_score + random.choice([0, 0, 0, 1, -1]) for _ in range(5)]
         elif diversity == 'Medium':
-            # Medium diversity - some variation
             if is_satisfied:
                 scores = [random.choice([3, 4, 4, 4, 5, 5]) for _ in range(5)]
             else:
                 scores = [random.choice([1, 1, 2, 2, 2, 3]) for _ in range(5)]
-        else:  # High diversity
-            # High diversity - wide range
+        else:
             if is_satisfied:
                 scores = [random.randint(3, 5) for _ in range(5)]
             else:
                 scores = [random.randint(1, 3) for _ in range(5)]
         
-        # Clip scores to valid range
         scores = [max(1, min(5, s)) for s in scores]
         
-        # Occasionally add missing values
-        if random.random() < 0.1:  # 10% chance
+        if random.random() < 0.1:
             scores[random.randint(0, 4)] = None
         
-        # Generate response data
         name = random.choice(first_names) + str(random.randint(1, 99))
         org = random.choice(organizations)
         overall_score = sum(s for s in scores if s is not None) / len([s for s in scores if s is not None])
@@ -504,11 +494,9 @@ def update_responses_with_cleaned(df_clean):
     score_cols = ['q1_score', 'q2_score', 'q3_score', 'q4_score', 'q5_score']
     
     for idx, row in df_clean.iterrows():
-        # Recalculate overall score
         scores = [row[col] for col in score_cols if pd.notna(row[col])]
         overall_score = sum(scores) / len(scores) if scores else None
         
-        # Update the record
         c.execute('''UPDATE responses 
                      SET q1_score=?, q2_score=?, q3_score=?, q4_score=?, q5_score=?, overall_score=?
                      WHERE id=?''',
@@ -527,7 +515,6 @@ def apply_imputation(df, strategy='median', constant_value=3, group_col=None):
     df_clean = df.copy()
     score_cols = ['q1_score', 'q2_score', 'q3_score', 'q4_score', 'q5_score']
     
-    # Ensure numeric
     for col in score_cols:
         df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce')
     
@@ -572,7 +559,6 @@ def apply_imputation(df, strategy='median', constant_value=3, group_col=None):
                 lambda x: x.fillna(x.mean())
             )
     
-    # Fill any remaining NaN with median as fallback
     for col in score_cols:
         if df_clean[col].isnull().any():
             median = df_clean[col].median()
@@ -632,7 +618,6 @@ def train_ml_model(df, model_type='logistic'):
     X = df[score_cols].values
     y = (df['overall_score'] >= 4).astype(int).values
     
-    # Check class distribution
     unique_classes, class_counts = np.unique(y, return_counts=True)
     
     if len(unique_classes) < 2:
@@ -643,18 +628,15 @@ def train_ml_model(df, model_type='logistic'):
                     f'Current data:\n'
                     f'  • Satisfied (score ≥ 4): {satisfied_count} responses\n'
                     f'  • Unsatisfied (score < 4): {unsatisfied_count} responses\n\n'
-                    f'💡 Tip: To use ML, you need at least 1 response in each category.\n'
-                    f'Try collecting more diverse feedback!'
+                    f'💡 Tip: To use ML, you need at least 1 response in each category.'
         }
     
-    # Adjust test_size if we have very few samples
     test_size = 0.3 if len(df) >= 10 else 0.2
     if len(df) < 5:
-        test_size = 1 / len(df)  # Leave one out
+        test_size = 1 / len(df)
     
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42, stratify=y)
     
-    # Select model
     models = {
         'logistic': LogisticRegression(random_state=42, max_iter=1000),
         'decision_tree': DecisionTreeClassifier(random_state=42, max_depth=4),
@@ -678,7 +660,6 @@ def train_ml_model(df, model_type='logistic'):
         'confusion_matrix': confusion_matrix(y_test, y_pred).tolist()
     }
     
-    # Add feature importance if available
     if hasattr(model, 'feature_importances_'):
         results['feature_importance'] = dict(zip(['Q1', 'Q2', 'Q3', 'Q4', 'Q5'], 
                                                   model.feature_importances_.tolist()))
@@ -695,7 +676,6 @@ def plot_basic_stats(df):
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
     fig.suptitle('Survey Statistics Dashboard', fontsize=14, fontweight='bold')
     
-    # 1. Average scores
     means = [df[col].mean() for col in score_cols]
     colors = ['#2ecc71' if m>=4 else '#f39c12' if m>=3 else '#e74c3c' for m in means]
     axes[0,0].bar(range(5), means, color=colors, edgecolor='black', alpha=0.7)
@@ -705,17 +685,14 @@ def plot_basic_stats(df):
     axes[0,0].set_xticklabels(['Q1', 'Q2', 'Q3', 'Q4', 'Q5'])
     axes[0,0].set_ylim(0, 5.5)
     
-    # 2. Distribution
     all_scores = df[score_cols].values.flatten()
     axes[0,1].hist(all_scores, bins=5, edgecolor='black', color='#3498db', alpha=0.7)
     axes[0,1].set_title('Score Distribution')
     axes[0,1].set_xlabel('Score')
     
-    # 3. Box plot
     df[score_cols].boxplot(ax=axes[1,0])
     axes[1,0].set_title('Score Spread by Question')
     
-    # 4. Satisfaction rate
     satisfied = (df['overall_score'] >= 4).sum()
     not_satisfied = (df['overall_score'] < 4).sum()
     axes[1,1].bar(['Not Satisfied', 'Satisfied'], [not_satisfied, satisfied],
@@ -727,7 +704,7 @@ def plot_basic_stats(df):
     return fig
 
 # ============================================================================
-# SIMPLE PREDICTION (Replace with Teachable Machine)
+# SIMPLE PREDICTION
 # ============================================================================
 
 def simple_predict(image):
@@ -758,7 +735,6 @@ def admin_panel():
     """Enhanced admin panel with educational features"""
     st.title("🔧 Admin Panel")
     
-    # Check admin authentication - NO DEFAULT PASSWORD MESSAGE SHOWN
     if 'admin_authenticated' not in st.session_state:
         st.session_state.admin_authenticated = False
     
@@ -777,15 +753,12 @@ def admin_panel():
                 else:
                     st.error("✗ Incorrect password")
         
-        # NO default password hint shown to users
         return
     
-    # Logout button
     if st.button("🚪 Logout"):
         st.session_state.admin_authenticated = False
         st.rerun()
     
-    # Tabs for different admin functions
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "⚙️ Settings", 
         "📊 View Data", 
@@ -798,7 +771,6 @@ def admin_panel():
     with tab1:
         st.subheader("Application Settings")
         
-        # Teachable Machine Model URL
         st.markdown("### 🎯 Teachable Machine Model")
         current_model_url = get_setting('model_url', '')
         model_url = st.text_input(
@@ -811,7 +783,6 @@ def admin_panel():
             save_setting('model_url', model_url)
             st.success("✓ Model URL saved!")
         
-        # Admin Password
         st.markdown("### 🔑 Change Admin Password")
         new_password = st.text_input("New Password:", type="password", key="new_pw")
         confirm_password = st.text_input("Confirm Password:", type="password", key="confirm_pw")
@@ -824,7 +795,6 @@ def admin_panel():
             else:
                 st.error("✗ Passwords don't match or are empty")
         
-        # Survey Settings
         st.markdown("### 📋 Survey Settings")
         survey_title = st.text_input("Survey Title:", value=get_setting('survey_title', 'Touchless Satisfaction Survey'))
         if st.button("💾 Save Title"):
@@ -842,10 +812,8 @@ def admin_panel():
         else:
             st.success(f"Total Responses: {len(df)}")
             
-            # Display data
             st.dataframe(df, use_container_width=True)
             
-            # Download button
             csv = df.to_csv(index=False)
             st.download_button(
                 "📥 Download CSV",
@@ -855,7 +823,6 @@ def admin_panel():
                 key='download-csv'
             )
             
-            # Delete options
             st.markdown("### 🗑️ Data Management")
             col1, col2 = st.columns(2)
             
@@ -873,144 +840,33 @@ def admin_panel():
                         st.success("✓ All data cleared")
                         st.rerun()
         
-        # Add upload and synthetic data options
         st.markdown("---")
         st.markdown("### 🧪 Testing & Data Import")
         
-        tab_upload, tab_synthetic = st.tabs(["📤 Upload CSV", "🎲 Generate Synthetic Data"])
-        
-        with tab_upload:
-            st.markdown("#### Upload Your Own CSV Data")
-            st.info("💡 Upload a CSV file with survey responses for testing. Must have columns: name, organization, q1_score through q5_score")
-            
-            uploaded_file = st.file_uploader("Choose CSV file", type=['csv'], key='csv_upload')
-            
-            if uploaded_file:
-                try:
-                    df_upload = pd.read_csv(uploaded_file)
-                    
-                    # Validate columns
-                    required_cols = ['name', 'organization', 'q1_score', 'q2_score', 'q3_score', 'q4_score', 'q5_score']
-                    missing_cols = [col for col in required_cols if col not in df_upload.columns]
-                    
-                    if missing_cols:
-                        st.error(f"❌ Missing required columns: {', '.join(missing_cols)}")
-                        st.info("Required columns: name, organization, q1_score, q2_score, q3_score, q4_score, q5_score")
-                    else:
-                        st.success(f"✓ Valid CSV with {len(df_upload)} rows")
-                        st.dataframe(df_upload.head(10))
-                        
-                        if st.button("📥 Import to Database", type="primary"):
-                            # Import each row
-                            for idx, row in df_upload.iterrows():
-                                responses = []
-                                for i in range(1, 6):
-                                    score = row[f'q{i}_score']
-                                    if pd.notna(score):
-                                        # Map score to label
-                                        if score >= 4.5:
-                                            label = 'Very Satisfied'
-                                        elif score >= 3.5:
-                                            label = 'Satisfied'
-                                        elif score >= 2.5:
-                                            label = 'Neutral'
-                                        elif score >= 1.5:
-                                            label = 'Unsatisfied'
-                                        else:
-                                            label = 'Very Unsatisfied'
-                                    else:
-                                        label = 'No Answer'
-                                        score = None
-                                    
-                                    responses.append({
-                                        'label': label,
-                                        'score': score,
-                                        'confidence': 0.95
-                                    })
-                                
-                                save_response(
-                                    str(row['name']),
-                                    str(row['organization']),
-                                    responses
-                                )
-                            
-                            st.success(f"✓ Imported {len(df_upload)} responses!")
-                            st.balloons()
-                            st.rerun()
-                
-                except Exception as e:
-                    st.error(f"❌ Error reading CSV: {str(e)}")
+        tab_synthetic = st.tabs(["🎲 Generate Synthetic Data"])[0]
         
         with tab_synthetic:
             st.markdown("#### Generate Synthetic Survey Data")
-            st.info("💡 Create fake survey responses for testing ML models and analysis")
+            st.info("💡 Create fake survey responses for testing")
             
-            col1, col2 = st.columns(2)
+            col1, col2, col3 = st.columns(3)
             
             with col1:
                 n_responses = st.number_input("Number of responses:", min_value=5, max_value=100, value=20)
-                satisfaction_rate = st.slider("Satisfaction rate (%):", 0, 100, 60)
             
             with col2:
-                variance = st.slider("Score variance:", 0.0, 2.0, 0.5, 0.1)
-                st.caption("Higher variance = more diverse responses")
+                satisfaction_rate = st.slider("Satisfaction rate (%):", 0, 100, 60)
             
-            if st.button("🎲 Generate Synthetic Data", type="primary", key='generate_synthetic_main'):
-                # Generate synthetic data
-                synthetic_data = []
-                
-                names = ["Alice", "Bob", "Charlie", "Diana", "Eve", "Frank", "Grace", "Henry", "Iris", "Jack",
-                        "Kate", "Leo", "Maria", "Nathan", "Olivia", "Peter", "Quinn", "Rachel", "Sam", "Tina"]
-                orgs = ["Company A", "Company B", "University", "Government", "NGO", "Startup", "Corporation"]
-                
-                for i in range(n_responses):
-                    # Determine if this should be satisfied or not
-                    is_satisfied = np.random.random() < (satisfaction_rate / 100)
-                    
-                    if is_satisfied:
-                        # Generate high scores (3.5-5.0)
-                        base_score = np.random.uniform(3.5, 5.0)
-                    else:
-                        # Generate low scores (1.0-3.5)
-                        base_score = np.random.uniform(1.0, 3.5)
-                    
-                    # Generate 5 question scores with variance
-                    scores = []
-                    responses = []
-                    for _ in range(5):
-                        score = np.clip(base_score + np.random.normal(0, variance), 1.0, 5.0)
-                        score = round(score * 2) / 2  # Round to nearest 0.5
-                        scores.append(score)
-                        
-                        # Map to label
-                        if score >= 4.5:
-                            label = 'Very Satisfied'
-                        elif score >= 3.5:
-                            label = 'Satisfied'
-                        elif score >= 2.5:
-                            label = 'Neutral'
-                        elif score >= 1.5:
-                            label = 'Unsatisfied'
-                        else:
-                            label = 'Very Unsatisfied'
-                        
-                        responses.append({
-                            'label': label,
-                            'score': score,
-                            'confidence': np.random.uniform(0.85, 0.99)
-                        })
-                    
-                    # Save to database
-                    name = np.random.choice(names) + f" {i+1}"
-                    org = np.random.choice(orgs)
-                    save_response(name, org, responses)
-                
+            with col3:
+                diversity = st.selectbox("Score diversity:", ['Low', 'Medium', 'High'])
+            
+            if st.button("🎲 Generate Data", type="primary"):
+                generate_synthetic_data(n_responses, satisfaction_rate, diversity)
                 st.success(f"✓ Generated {n_responses} synthetic responses!")
-                st.info(f"Distribution: ~{satisfaction_rate}% satisfied, ~{100-satisfaction_rate}% unsatisfied")
                 st.balloons()
                 st.rerun()
     
-    # ========== TAB 3: CLEAN DATA (ENHANCED) ==========
+    # ========== TAB 3: CLEAN DATA ==========
     with tab3:
         st.subheader("🧹 Data Cleaning with Multiple Strategies")
         
@@ -1023,7 +879,6 @@ def admin_panel():
             
             score_cols = ['q1_score', 'q2_score', 'q3_score', 'q4_score', 'q5_score']
             
-            # Show missing values
             missing_counts = {}
             for col in score_cols:
                 missing = df[col].isnull().sum()
@@ -1039,7 +894,7 @@ def admin_panel():
                         if count > 0:
                             st.write(f"  - {col}: {count} missing")
                 else:
-                    st.success("✓ No missing values in database!")
+                    st.success("✓ No missing values!")
             
             with col2:
                 st.metric("Total Missing", total_missing)
@@ -1054,10 +909,8 @@ def admin_panel():
                 format_func=lambda x: IMPUTATION_STRATEGIES[x]['name']
             )
             
-            # Show educational info
             show_method_info(IMPUTATION_STRATEGIES, strategy)
             
-            # Additional parameters for some strategies
             constant_value = 3
             group_col = None
             
@@ -1071,7 +924,6 @@ def admin_panel():
             
             st.markdown("---")
             
-            # Action buttons
             col1, col2, col3 = st.columns(3)
             
             with col1:
@@ -1084,9 +936,7 @@ def admin_panel():
                 if st.button("💾 Save to Database"):
                     if 'cleaned_df' in st.session_state and st.session_state.get('cleaning_applied'):
                         update_responses_with_cleaned(st.session_state.cleaned_df)
-                        st.success("✓ Cleaned data saved to database!")
-                        st.info("ℹ️ Refresh the page to see updated data everywhere")
-                        # Clear the session state
+                        st.success("✓ Cleaned data saved!")
                         del st.session_state.cleaned_df
                         st.session_state.cleaning_applied = False
                         st.rerun()
@@ -1104,34 +954,19 @@ def admin_panel():
                         key='download-cleaned'
                     )
             
-            # Display comparison
             if 'cleaned_df' in st.session_state and st.session_state.get('cleaning_applied'):
                 st.markdown("---")
                 st.markdown("### 📊 Data Comparison")
                 
-                tab_before, tab_after, tab_stats = st.tabs(["Before Cleaning", "After Cleaning", "Statistics"])
+                tab_before, tab_after, tab_stats = st.tabs(["Before", "After", "Statistics"])
                 
                 with tab_before:
-                    st.markdown("#### Original Data (with missing values)")
-                    st.dataframe(df[['id', 'name', 'organization'] + score_cols + ['overall_score']], 
-                                use_container_width=True)
-                    
-                    st.markdown("##### Missing Value Summary")
-                    for col, count in missing_counts.items():
-                        if count > 0:
-                            st.write(f"- {col}: {count} missing ({count/len(df)*100:.1f}%)")
+                    st.markdown("#### Original Data")
+                    st.dataframe(df[['id', 'name', 'organization'] + score_cols + ['overall_score']])
                 
                 with tab_after:
-                    st.markdown("#### Cleaned Data (no missing values)")
-                    st.dataframe(st.session_state.cleaned_df[['id', 'name', 'organization'] + score_cols + ['overall_score']], 
-                                use_container_width=True)
-                    
-                    # Count remaining missing (should be 0)
-                    remaining_missing = st.session_state.cleaned_df[score_cols].isnull().sum().sum()
-                    if remaining_missing == 0:
-                        st.success("✓ All missing values have been filled!")
-                    else:
-                        st.warning(f"⚠️ {remaining_missing} missing values remaining")
+                    st.markdown("#### Cleaned Data")
+                    st.dataframe(st.session_state.cleaned_df[['id', 'name', 'organization'] + score_cols + ['overall_score']])
                 
                 with tab_stats:
                     st.markdown("#### Statistical Comparison")
@@ -1139,22 +974,14 @@ def admin_panel():
                     col1, col2 = st.columns(2)
                     
                     with col1:
-                        st.markdown("**Before Cleaning**")
+                        st.markdown("**Before**")
                         st.dataframe(df[score_cols].describe())
                     
                     with col2:
-                        st.markdown("**After Cleaning**")
+                        st.markdown("**After**")
                         st.dataframe(st.session_state.cleaned_df[score_cols].describe())
-                    
-                    st.markdown("##### Changes Summary")
-                    for col in score_cols:
-                        before_mean = df[col].mean()
-                        after_mean = st.session_state.cleaned_df[col].mean()
-                        if pd.notna(before_mean) and pd.notna(after_mean):
-                            diff = after_mean - before_mean
-                            st.write(f"**{col}**: {before_mean:.2f} → {after_mean:.2f} (change: {diff:+.2f})")
     
-    # ========== TAB 4: STATISTICS (ENHANCED) ==========
+    # ========== TAB 4: STATISTICS (FIXED!) ==========
     with tab4:
         st.subheader("📈 Statistical Analysis")
         
@@ -1163,25 +990,21 @@ def admin_panel():
         if len(df) < 2:
             st.info("Need at least 2 responses for statistical analysis")
         else:
-            # Always show saved interpretation if it exists
+            # Show saved interpretation if it exists - ALWAYS VISIBLE
             saved_interp = get_interpretation('statistics')
             if saved_interp:
                 st.success("✅ You have a saved interpretation!")
                 with st.expander("📝 View Your Previous Interpretation", expanded=True):
                     st.markdown("**Your Saved Analysis:**")
                     st.info(saved_interp)
-                    col1, col2 = st.columns([1, 4])
-                    with col1:
-                        if st.button("🗑️ Delete", key="clear_stats_top"):
-                            conn = sqlite3.connect(DB_FILE)
-                            c = conn.cursor()
-                            c.execute("DELETE FROM interpretations WHERE analysis_type='statistics'")
-                            conn.commit()
-                            conn.close()
-                            st.success("✓ Interpretation deleted!")
-                            st.rerun()
-                    with col2:
-                        st.caption("💡 Run analysis again to update your interpretation")
+                    if st.button("🗑️ Delete", key="clear_stats_top"):
+                        conn = sqlite3.connect(DB_FILE)
+                        c = conn.cursor()
+                        c.execute("DELETE FROM interpretations WHERE analysis_type='statistics'")
+                        conn.commit()
+                        conn.close()
+                        st.success("✓ Interpretation deleted!")
+                        st.rerun()
                 st.markdown("---")
             
             st.markdown("### 🎓 Select Statistical Methods")
@@ -1193,17 +1016,14 @@ def admin_panel():
                 format_func=lambda x: STATISTICAL_METHODS[x]['name']
             )
             
-            # Show info for each selected method
             for method in methods:
                 show_method_info(STATISTICAL_METHODS, method)
             
             if st.button("🔬 Run Statistical Analysis", type="primary"):
                 with st.spinner("Analyzing..."):
-                    # Clean data first
                     df_clean = apply_imputation(df, 'median')
                     results = perform_statistical_analysis(df_clean, methods)
                     
-                    # Display results
                     if 'descriptive' in methods and 'descriptive' in results:
                         st.markdown("### 📊 Descriptive Statistics")
                         col1, col2, col3 = st.columns(3)
@@ -1228,22 +1048,20 @@ def admin_panel():
                         st.markdown("### 🔗 Correlation Matrix")
                         st.dataframe(results['correlation'].style.background_gradient(cmap='coolwarm', vmin=-1, vmax=1))
                     
-                    # Visualizations
                     st.markdown("### 📊 Visualizations")
                     fig = plot_basic_stats(df_clean)
                     st.pyplot(fig)
                     
-                    # Interpretation box
                     st.markdown("---")
                     st.markdown("### 📝 Add Your Interpretation")
-                    st.info("💡 Write your observations, insights, and conclusions from the analysis above. This will be saved and appear at the top when you return!")
+                    st.info("💡 Write your observations and insights. This will be saved!")
                     
                     interpretation = st.text_area(
                         "Your interpretation:",
                         value=get_interpretation('statistics'),
                         height=200,
                         key='stats_interp',
-                        placeholder="Example: The overall satisfaction mean is 4.2/5.0, indicating high satisfaction. Q1 and Q2 show strong positive correlation (r=0.85), suggesting content quality and instructor teaching are closely related..."
+                        placeholder="Example: The overall satisfaction mean is 4.2/5.0, indicating high satisfaction..."
                     )
                     
                     col1, col2 = st.columns([1, 3])
@@ -1251,9 +1069,9 @@ def admin_panel():
                         if st.button("💾 Save Interpretation", key='save_stats', type="primary"):
                             if interpretation.strip():
                                 save_interpretation('statistics', interpretation)
-                                st.success("✓ Interpretation saved! Scroll down to see it.")
+                                st.success("✓ Interpretation saved!")
                                 st.balloons()
-                                st.rerun()  # Refresh to show in "All Saved Interpretations"
+                                st.rerun()
                             else:
                                 st.warning("⚠️ Please write an interpretation first!")
                     
@@ -1261,100 +1079,56 @@ def admin_panel():
                         if interpretation.strip():
                             word_count = len(interpretation.split())
                             st.caption(f"📝 {word_count} words")
-            
-            # Always show ALL saved interpretations at bottom (outside of analysis button
+        
+        # CRITICAL FIX: This section is now OUTSIDE the button block (indent=8, not 12)
         st.markdown("---")
         st.markdown("### 📚 All Saved Interpretations")
-        st.caption("💡 All your saved analysis notes appear here for easy reference")
+        st.caption("💡 All your saved analysis notes appear here")
+        
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute("SELECT analysis_type, interpretation, timestamp FROM interpretations WHERE analysis_type = 'statistics' ORDER BY timestamp DESC")
+        all_interps = c.fetchall()
+        conn.close()
+        
+        if all_interps:
+            st.success(f"✅ {len(all_interps)} interpretation(s) saved")
             
-            # Get all saved interpretations
-            saved_stats = get_interpretation('statistics')
-            
-            if saved_stats:
-                st.markdown("#### 📊 Statistical Analysis Notes")
-                st.info(saved_stats)
-                if st.button("🗑️ Delete Statistical Interpretation", key="del_stats_bottom"):
-                    conn = sqlite3.connect(DB_FILE)
-                    c = conn.cursor()
-                    c.execute("DELETE FROM interpretations WHERE analysis_type='statistics'")
-                    conn.commit()
-                    conn.close()
-                    st.success("✓ Deleted!")
-                    st.rerun()
-            
-            # Show ALL ML interpretations
-            ml_interps = []
-            for model_key in ML_MODELS.keys():
-                interp = get_interpretation(f'ml_{model_key}')
-                if interp:
-                    ml_interps.append((ML_MODELS[model_key]['name'], interp, model_key))
-            
-            if ml_interps:
-                st.markdown("#### 🤖 Machine Learning Notes")
-                for idx, (model_name, interp, model_key) in enumerate(ml_interps, 1):
-                    with st.expander(f"{idx}. {model_name}", expanded=False):
-                        st.info(interp)
-                        if st.button(f"🗑️ Delete", key=f"del_ml_{model_key}_bottom"):
+            for idx, (analysis_type, interp, timestamp) in enumerate(all_interps):
+                with st.container():
+                    col1, col2 = st.columns([5, 1])
+                    with col1:
+                        st.markdown(f"**📝 Saved: {timestamp}**")
+                    with col2:
+                        if st.button("🗑️", key=f"del_stat_{idx}"):
                             conn = sqlite3.connect(DB_FILE)
                             c = conn.cursor()
-                            c.execute("DELETE FROM interpretations WHERE analysis_type=?", (f'ml_{model_key}',))
+                            c.execute("DELETE FROM interpretations WHERE analysis_type=? AND timestamp=?", 
+                                     (analysis_type, timestamp))
                             conn.commit()
                             conn.close()
-                            st.success("✓ Deleted!")
                             st.rerun()
-            
-            if not saved_stats and not ml_interps:
-                st.info("📝 No saved interpretations yet. Run an analysis and save your notes!")
-            
-            # Always show interpretation history at bottom
-            st.markdown("---")
-            st.markdown("### 📚 Interpretation History")
-            
-            # Get all interpretations
-            conn = sqlite3.connect(DB_FILE)
-            c = conn.cursor()
-            c.execute("SELECT analysis_type, interpretation, timestamp FROM interpretations WHERE analysis_type = 'statistics' ORDER BY timestamp DESC")
-            all_interps = c.fetchall()
-            conn.close()
-            
-            if all_interps:
-                st.success(f"✅ {len(all_interps)} interpretation(s) saved")
-                
-                for idx, (analysis_type, interp, timestamp) in enumerate(all_interps):
-                    with st.container():
-                        col1, col2 = st.columns([5, 1])
-                        with col1:
-                            st.markdown(f"**📝 Saved: {timestamp}**")
-                        with col2:
-                            if st.button("🗑️ Delete", key=f"del_stat_{idx}"):
-                                conn = sqlite3.connect(DB_FILE)
-                                c = conn.cursor()
-                                c.execute("DELETE FROM interpretations WHERE analysis_type=? AND timestamp=?", 
-                                         (analysis_type, timestamp))
-                                conn.commit()
-                                conn.close()
-                                st.rerun()
-                        
-                        st.info(interp)
-                        if idx < len(all_interps) - 1:
-                            st.markdown("---")
-            else:
-                st.info("💡 No saved interpretations yet. Run analysis and save your interpretation above!")
+                    
+                    st.info(interp)
+                    if idx < len(all_interps) - 1:
+                        st.markdown("---")
+        else:
+            st.info("💡 No saved interpretations yet. Run analysis and save your notes!")
     
-    # ========== TAB 5: MACHINE LEARNING (ENHANCED) ==========
+    # ========== TAB 5: MACHINE LEARNING ==========
     with tab5:
         st.subheader("🤖 Machine Learning Analysis")
         
         if not ML_AVAILABLE:
-            st.error("ML libraries not available. Install scikit-learn, scipy, matplotlib, seaborn")
+            st.error("ML libraries not available.")
             return
         
         df = get_all_responses()
         
         if len(df) < 3:
-            st.info(f"Need at least 3 responses for ML analysis. Current responses: {len(df)}")
+            st.info(f"Need at least 3 responses for ML. Current: {len(df)}")
         else:
-            # Always show saved ML interpretations if they exist
+            # Show saved ML interpretations - ALWAYS VISIBLE
             all_ml_interps = []
             for model_key in ML_MODELS.keys():
                 interp = get_interpretation(f'ml_{model_key}')
@@ -1363,7 +1137,7 @@ def admin_panel():
             
             if all_ml_interps:
                 st.success(f"✅ You have {len(all_ml_interps)} saved ML interpretation(s)!")
-                with st.expander(f"📝 View Your Previous ML Interpretations ({len(all_ml_interps)} saved)", expanded=True):
+                with st.expander(f"📝 View Previous Interpretations ({len(all_ml_interps)})", expanded=True):
                     for idx, (model_name, interp, model_key) in enumerate(all_ml_interps):
                         st.markdown(f"### {idx+1}. {model_name}")
                         st.info(interp)
@@ -1373,7 +1147,7 @@ def admin_panel():
                             c.execute("DELETE FROM interpretations WHERE analysis_type=?", (f'ml_{model_key}',))
                             conn.commit()
                             conn.close()
-                            st.success("✓ Interpretation deleted!")
+                            st.success("✓ Deleted!")
                             st.rerun()
                         if idx < len(all_ml_interps) - 1:
                             st.markdown("---")
@@ -1387,7 +1161,6 @@ def admin_panel():
                 format_func=lambda x: ML_MODELS[x]['name']
             )
             
-            # Show educational info
             show_method_info(ML_MODELS, model_type)
             
             if st.button("🚀 Train Model", type="primary"):
@@ -1398,7 +1171,6 @@ def admin_panel():
                     if 'error' in results:
                         st.error(results['error'])
                     else:
-                        # Display results
                         st.markdown("### 📊 Model Performance")
                         
                         col1, col2, col3, col4 = st.columns(4)
@@ -1411,7 +1183,6 @@ def admin_panel():
                         with col4:
                             st.metric("F1-Score", f"{results['f1']:.2%}")
                         
-                        # Feature importance
                         if 'feature_importance' in results:
                             st.markdown("### 📊 Feature Importance")
                             importance_df = pd.DataFrame(
@@ -1427,7 +1198,6 @@ def admin_panel():
                             
                             st.dataframe(importance_df)
                         
-                        # Confusion Matrix
                         if 'confusion_matrix' in results:
                             st.markdown("### 🎯 Confusion Matrix")
                             cm = np.array(results['confusion_matrix'])
@@ -1438,73 +1208,69 @@ def admin_panel():
                             ax.set_title('Confusion Matrix')
                             st.pyplot(fig)
                         
-                        # Interpretation box
-                        # Interpretation box
                         st.markdown("---")
                         st.markdown("### 📝 Add Your ML Interpretation")
-                        st.info(f"💡 Write your observations about the {ML_MODELS[model_type]['name']} results. This will be saved and appear at the top!")
+                        st.info(f"💡 Write your observations about {ML_MODELS[model_type]['name']}")
                         
                         ml_interpretation = st.text_area(
                             f"Your interpretation for {ML_MODELS[model_type]['name']}:",
                             value=get_interpretation(f'ml_{model_type}'),
                             height=200,
                             key='ml_interp',
-                            placeholder=f"Example: The {ML_MODELS[model_type]['name']} achieved 85% accuracy. Q1 (content) was the most important feature, followed by Q2 (instructor). This suggests..."
+                            placeholder=f"Example: The {ML_MODELS[model_type]['name']} achieved 85% accuracy..."
                         )
                         
                         col1, col2 = st.columns([1, 3])
                         with col1:
-                            if st.button("💾 Save Interpretation", key='save_ml', type="primary"):
+                            if st.button("💾 Save", key='save_ml', type="primary"):
                                 if ml_interpretation.strip():
                                     save_interpretation(f'ml_{model_type}', ml_interpretation)
-                                    st.success("✓ Interpretation saved! Scroll to see it above.")
+                                    st.success("✓ Saved!")
                                     st.balloons()
-                                    st.rerun()  # Refresh to show in "Previous Interpretations"
+                                    st.rerun()
                                 else:
-                                    st.warning("⚠️ Please write an interpretation first!")
+                                    st.warning("⚠️ Please write an interpretation!")
                         
                         with col2:
                             if ml_interpretation.strip():
-                                word_count = len(ml_interpretation.split())
-                                st.caption(f"📝 {word_count} words")
+                                st.caption(f"📝 {len(ml_interpretation.split())} words")
+        
+        # ML interpretation history - ALWAYS VISIBLE (outside button block)
+        st.markdown("---")
+        st.markdown("### 📚 All ML Interpretation History")
+        
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute("SELECT analysis_type, interpretation, timestamp FROM interpretations WHERE analysis_type LIKE 'ml_%' ORDER BY timestamp DESC")
+        all_ml_interps = c.fetchall()
+        conn.close()
+        
+        if all_ml_interps:
+            st.success(f"✅ {len(all_ml_interps)} ML interpretation(s) saved")
             
-            # Always show ML interpretation history at bottom
-            st.markdown("---")
-            st.markdown("### 📚 All ML Interpretation History")
-            
-            # Get all ML interpretations
-            conn = sqlite3.connect(DB_FILE)
-            c = conn.cursor()
-            c.execute("SELECT analysis_type, interpretation, timestamp FROM interpretations WHERE analysis_type LIKE 'ml_%' ORDER BY timestamp DESC")
-            all_ml_interps = c.fetchall()
-            conn.close()
-            
-            if all_ml_interps:
-                st.success(f"✅ {len(all_ml_interps)} ML interpretation(s) saved across all models")
+            for idx, (analysis_type, interp, timestamp) in enumerate(all_ml_interps):
+                model_key = analysis_type.replace('ml_', '')
+                model_name = ML_MODELS.get(model_key, {}).get('name', model_key)
                 
-                for idx, (analysis_type, interp, timestamp) in enumerate(all_ml_interps):
-                    model_key = analysis_type.replace('ml_', '')
-                    model_name = ML_MODELS.get(model_key, {}).get('name', model_key)
+                with st.container():
+                    col1, col2 = st.columns([5, 1])
+                    with col1:
+                        st.markdown(f"**🤖 {model_name}** - {timestamp}")
+                    with col2:
+                        if st.button("🗑️", key=f"del_ml_{idx}"):
+                            conn = sqlite3.connect(DB_FILE)
+                            c = conn.cursor()
+                            c.execute("DELETE FROM interpretations WHERE analysis_type=? AND timestamp=?", 
+                                     (analysis_type, timestamp))
+                            conn.commit()
+                            conn.close()
+                            st.rerun()
                     
-                    with st.container():
-                        col1, col2 = st.columns([5, 1])
-                        with col1:
-                            st.markdown(f"**🤖 {model_name}** - {timestamp}")
-                        with col2:
-                            if st.button("🗑️ Delete", key=f"del_ml_{idx}"):
-                                conn = sqlite3.connect(DB_FILE)
-                                c = conn.cursor()
-                                c.execute("DELETE FROM interpretations WHERE analysis_type=? AND timestamp=?", 
-                                         (analysis_type, timestamp))
-                                conn.commit()
-                                conn.close()
-                                st.rerun()
-                        
-                        st.info(interp)
-                        if idx < len(all_ml_interps) - 1:
-                            st.markdown("---")
-            else:
-                st.info("💡 No saved ML interpretations yet. Train models and save your interpretations above!")
+                    st.info(interp)
+                    if idx < len(all_ml_interps) - 1:
+                        st.markdown("---")
+        else:
+            st.info("💡 No saved ML interpretations yet!")
 
 # ============================================================================
 # SURVEY PAGE
@@ -1515,7 +1281,6 @@ def survey_page():
     survey_title = get_setting('survey_title', 'Touchless Satisfaction Survey')
     st.title(f"✋ {survey_title}")
     
-    # Sidebar
     with st.sidebar:
         st.header("📋 Instructions")
         st.markdown("""
@@ -1530,17 +1295,14 @@ def survey_page():
         
         st.info("Show clear hand gestures for best results!")
     
-    # Initialize session
     if 'started' not in st.session_state:
         st.session_state.started = False
         st.session_state.current_q = 0
         st.session_state.responses = []
         st.session_state.completed = False
     
-    # Start screen
     if not st.session_state.started:
         st.markdown("## Welcome!")
-        st.markdown("Please provide your information to begin the survey.")
         
         col1, col2 = st.columns(2)
         with col1:
@@ -1555,7 +1317,6 @@ def survey_page():
             st.rerun()
         return
     
-    # Completed screen
     if st.session_state.completed:
         st.success("✅ Survey Complete!")
         st.balloons()
@@ -1581,7 +1342,7 @@ def survey_page():
             elif avg_score >= 3:
                 st.info("👍 Thank you for your feedback!")
             else:
-                st.warning("We appreciate your honest feedback and will work to improve!")
+                st.warning("We appreciate your feedback and will improve!")
         
         if st.button("📝 Submit Another Response"):
             st.session_state.started = False
@@ -1591,7 +1352,6 @@ def survey_page():
             st.rerun()
         return
     
-    # Survey in progress
     current_q = st.session_state.current_q
     total_q = len(SURVEY_QUESTIONS)
     
@@ -1608,7 +1368,7 @@ def survey_page():
         if img_file:
             image = Image.open(img_file)
             
-            with st.spinner("Analyzing gesture..."):
+            with st.spinner("Analyzing..."):
                 gesture, confidence = simple_predict(image)
             
             info = GESTURE_MAP[gesture]
@@ -1628,14 +1388,11 @@ def survey_page():
                     st.rerun()
                 else:
                     st.session_state.completed = True
-                    
-                    # Save to database
                     save_response(
                         st.session_state.name,
                         st.session_state.org,
                         st.session_state.responses
                     )
-                    
                     st.rerun()
     
     with col2:
@@ -1648,10 +1405,8 @@ def survey_page():
 # ============================================================================
 
 def main():
-    # Initialize database
     init_database()
     
-    # Sidebar navigation
     with st.sidebar:
         st.markdown("---")
         page = st.radio(
@@ -1660,7 +1415,6 @@ def main():
             label_visibility="collapsed"
         )
     
-    # Route to appropriate page
     if page == "📝 Survey":
         survey_page()
     else:
