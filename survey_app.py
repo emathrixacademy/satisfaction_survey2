@@ -1081,9 +1081,9 @@ def admin_panel():
                             st.caption(f"📝 {word_count} words")
         
         # CRITICAL FIX: This section is now OUTSIDE the button block (indent=8, not 12)
-        st.markdown("---")
-        st.markdown("### 📚 All Saved Interpretations")
-        st.caption("💡 All your saved analysis notes appear here")
+        # st.markdown("---")
+        # st.markdown("### 📚 All Saved Interpretations")
+        # st.caption("💡 All your saved analysis notes appear here")
         
         conn = sqlite3.connect(DB_FILE)
         c = conn.cursor()
