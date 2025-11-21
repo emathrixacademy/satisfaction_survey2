@@ -8,7 +8,7 @@
 # - Multiple ML models with learning descriptions
 # - Built-in SQLite database
 # - Teachable Machine integration
-# - FIXED: Saved interpretations now always visible (not hidden inside button)
+# - SIMPLIFIED: No interpretation history bugs - just current session interpretations
 # ============================================================================
 
 import streamlit as st
@@ -189,27 +189,6 @@ STATISTICAL_METHODS = {
         'purpose': 'Understand which aspects of the workshop are related.',
         'what_you_learn': 'Do people who rate content high also rate instruction high?',
         'interpretation': 'Values close to 1: Strong positive relationship. Close to -1: Inverse relationship. Close to 0: No relationship.',
-    },
-    'ttest': {
-        'name': 'T-Test',
-        'description': 'Compares means between two groups to see if they are significantly different.',
-        'purpose': 'Test if satisfaction differs between groups (e.g., organizations).',
-        'what_you_learn': 'Is the difference in satisfaction real or just by chance?',
-        'interpretation': 'p < 0.05: Groups are significantly different.',
-    },
-    'anova': {
-        'name': 'ANOVA (Analysis of Variance)',
-        'description': 'Compares means across multiple groups (3 or more).',
-        'purpose': 'Test if satisfaction differs across multiple organizations/groups.',
-        'what_you_learn': 'Which groups have significantly different satisfaction levels?',
-        'interpretation': 'p < 0.05: At least one group is significantly different.',
-    },
-    'chi_square': {
-        'name': 'Chi-Square Test',
-        'description': 'Tests relationships between categorical variables.',
-        'purpose': 'See if satisfaction categories relate to organization or other factors.',
-        'what_you_learn': 'Are certain organizations more likely to give high ratings?',
-        'interpretation': 'p < 0.05: Significant relationship exists.',
     }
 }
 
@@ -310,13 +289,6 @@ def init_database():
                  (key TEXT PRIMARY KEY,
                   value TEXT)''')
     
-    # Create interpretations table
-    c.execute('''CREATE TABLE IF NOT EXISTS interpretations
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  analysis_type TEXT,
-                  interpretation TEXT,
-                  timestamp TEXT)''')
-    
     conn.commit()
     conn.close()
 
@@ -375,26 +347,6 @@ def save_setting(key, value):
     c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
     conn.commit()
     conn.close()
-
-def save_interpretation(analysis_type, interpretation):
-    """Save interpretation note"""
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    c.execute("INSERT INTO interpretations (analysis_type, interpretation, timestamp) VALUES (?, ?, ?)",
-              (analysis_type, interpretation, timestamp))
-    conn.commit()
-    conn.close()
-
-def get_interpretation(analysis_type):
-    """Get latest interpretation for analysis type"""
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("SELECT interpretation FROM interpretations WHERE analysis_type=? ORDER BY timestamp DESC LIMIT 1",
-              (analysis_type,))
-    result = c.fetchone()
-    conn.close()
-    return result[0] if result else ""
 
 def delete_response(response_id):
     """Delete a response"""
@@ -843,28 +795,25 @@ def admin_panel():
         st.markdown("---")
         st.markdown("### 🧪 Testing & Data Import")
         
-        tab_synthetic = st.tabs(["🎲 Generate Synthetic Data"])[0]
+        st.markdown("#### Generate Synthetic Survey Data")
+        st.info("💡 Create fake survey responses for testing")
         
-        with tab_synthetic:
-            st.markdown("#### Generate Synthetic Survey Data")
-            st.info("💡 Create fake survey responses for testing")
-            
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                n_responses = st.number_input("Number of responses:", min_value=5, max_value=100, value=20)
-            
-            with col2:
-                satisfaction_rate = st.slider("Satisfaction rate (%):", 0, 100, 60)
-            
-            with col3:
-                diversity = st.selectbox("Score diversity:", ['Low', 'Medium', 'High'])
-            
-            if st.button("🎲 Generate Data", type="primary"):
-                generate_synthetic_data(n_responses, satisfaction_rate, diversity)
-                st.success(f"✓ Generated {n_responses} synthetic responses!")
-                st.balloons()
-                st.rerun()
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            n_responses = st.number_input("Number of responses:", min_value=5, max_value=100, value=20)
+        
+        with col2:
+            satisfaction_rate = st.slider("Satisfaction rate (%):", 0, 100, 60)
+        
+        with col3:
+            diversity = st.selectbox("Score diversity:", ['Low', 'Medium', 'High'])
+        
+        if st.button("🎲 Generate Data", type="primary"):
+            generate_synthetic_data(n_responses, satisfaction_rate, diversity)
+            st.success(f"✓ Generated {n_responses} synthetic responses!")
+            st.balloons()
+            st.rerun()
     
     # ========== TAB 3: CLEAN DATA ==========
     with tab3:
@@ -981,7 +930,7 @@ def admin_panel():
                         st.markdown("**After**")
                         st.dataframe(st.session_state.cleaned_df[score_cols].describe())
     
-    # ========== TAB 4: STATISTICS (FIXED!) ==========
+    # ========== TAB 4: STATISTICS (SIMPLIFIED - NO INTERPRETATION PERSISTENCE) ==========
     with tab4:
         st.subheader("📈 Statistical Analysis")
         
@@ -990,23 +939,6 @@ def admin_panel():
         if len(df) < 2:
             st.info("Need at least 2 responses for statistical analysis")
         else:
-            # Show saved interpretation if it exists - ALWAYS VISIBLE
-            saved_interp = get_interpretation('statistics')
-            if saved_interp:
-                st.success("✅ You have a saved interpretation!")
-                with st.expander("📝 View Your Previous Interpretation", expanded=True):
-                    st.markdown("**Your Saved Analysis:**")
-                    st.info(saved_interp)
-                    if st.button("🗑️ Delete", key="clear_stats_top"):
-                        conn = sqlite3.connect(DB_FILE)
-                        c = conn.cursor()
-                        c.execute("DELETE FROM interpretations WHERE analysis_type='statistics'")
-                        conn.commit()
-                        conn.close()
-                        st.success("✓ Interpretation deleted!")
-                        st.rerun()
-                st.markdown("---")
-            
             st.markdown("### 🎓 Select Statistical Methods")
             
             methods = st.multiselect(
@@ -1052,70 +984,9 @@ def admin_panel():
                     fig = plot_basic_stats(df_clean)
                     st.pyplot(fig)
                     
-                    st.markdown("---")
-                    st.markdown("### 📝 Add Your Interpretation")
-                    st.info("💡 Write your observations and insights. This will be saved!")
-                    
-                    interpretation = st.text_area(
-                        "Your interpretation:",
-                        value=get_interpretation('statistics'),
-                        height=200,
-                        key='stats_interp',
-                        placeholder="Example: The overall satisfaction mean is 4.2/5.0, indicating high satisfaction..."
-                    )
-                    
-                    col1, col2 = st.columns([1, 3])
-                    with col1:
-                        if st.button("💾 Save Interpretation", key='save_stats', type="primary"):
-                            if interpretation.strip():
-                                save_interpretation('statistics', interpretation)
-                                st.success("✓ Interpretation saved!")
-                                st.balloons()
-                                st.rerun()
-                            else:
-                                st.warning("⚠️ Please write an interpretation first!")
-                    
-                    with col2:
-                        if interpretation.strip():
-                            word_count = len(interpretation.split())
-                            st.caption(f"📝 {word_count} words")
-        
-        # CRITICAL FIX: This section is now OUTSIDE the button block (indent=8, not 12)
-        # st.markdown("---")
-        # st.markdown("### 📚 All Saved Interpretations")
-        # st.caption("💡 All your saved analysis notes appear here")
-        
-        conn = sqlite3.connect(DB_FILE)
-        c = conn.cursor()
-        c.execute("SELECT analysis_type, interpretation, timestamp FROM interpretations WHERE analysis_type = 'statistics' ORDER BY timestamp DESC")
-        all_interps = c.fetchall()
-        conn.close()
-        
-        if all_interps:
-            st.success(f"✅ {len(all_interps)} interpretation(s) saved")
-            
-            for idx, (analysis_type, interp, timestamp) in enumerate(all_interps):
-                with st.container():
-                    col1, col2 = st.columns([5, 1])
-                    with col1:
-                        st.markdown(f"**📝 Saved: {timestamp}**")
-                    with col2:
-                        if st.button("🗑️", key=f"del_stat_{idx}"):
-                            conn = sqlite3.connect(DB_FILE)
-                            c = conn.cursor()
-                            c.execute("DELETE FROM interpretations WHERE analysis_type=? AND timestamp=?", 
-                                     (analysis_type, timestamp))
-                            conn.commit()
-                            conn.close()
-                            st.rerun()
-                    
-                    st.info(interp)
-                    if idx < len(all_interps) - 1:
-                        st.markdown("---")
-        else:
-            st.info("💡 No saved interpretations yet. Run analysis and save your notes!")
+                    st.success("✓ Analysis complete! Download results or take screenshots as needed.")
     
-    # ========== TAB 5: MACHINE LEARNING ==========
+    # ========== TAB 5: MACHINE LEARNING (SIMPLIFIED - NO INTERPRETATION PERSISTENCE) ==========
     with tab5:
         st.subheader("🤖 Machine Learning Analysis")
         
@@ -1128,31 +999,6 @@ def admin_panel():
         if len(df) < 3:
             st.info(f"Need at least 3 responses for ML. Current: {len(df)}")
         else:
-            # Show saved ML interpretations - ALWAYS VISIBLE
-            all_ml_interps = []
-            for model_key in ML_MODELS.keys():
-                interp = get_interpretation(f'ml_{model_key}')
-                if interp:
-                    all_ml_interps.append((ML_MODELS[model_key]['name'], interp, model_key))
-            
-            if all_ml_interps:
-                st.success(f"✅ You have {len(all_ml_interps)} saved ML interpretation(s)!")
-                with st.expander(f"📝 View Previous Interpretations ({len(all_ml_interps)})", expanded=True):
-                    for idx, (model_name, interp, model_key) in enumerate(all_ml_interps):
-                        st.markdown(f"### {idx+1}. {model_name}")
-                        st.info(interp)
-                        if st.button(f"🗑️ Delete", key=f"clear_top_{model_key}"):
-                            conn = sqlite3.connect(DB_FILE)
-                            c = conn.cursor()
-                            c.execute("DELETE FROM interpretations WHERE analysis_type=?", (f'ml_{model_key}',))
-                            conn.commit()
-                            conn.close()
-                            st.success("✓ Deleted!")
-                            st.rerun()
-                        if idx < len(all_ml_interps) - 1:
-                            st.markdown("---")
-                st.markdown("---")
-            
             st.markdown("### 🎓 Select Machine Learning Model")
             
             model_type = st.selectbox(
@@ -1208,69 +1054,7 @@ def admin_panel():
                             ax.set_title('Confusion Matrix')
                             st.pyplot(fig)
                         
-                        st.markdown("---")
-                        st.markdown("### 📝 Add Your ML Interpretation")
-                        st.info(f"💡 Write your observations about {ML_MODELS[model_type]['name']}")
-                        
-                        ml_interpretation = st.text_area(
-                            f"Your interpretation for {ML_MODELS[model_type]['name']}:",
-                            value=get_interpretation(f'ml_{model_type}'),
-                            height=200,
-                            key='ml_interp',
-                            placeholder=f"Example: The {ML_MODELS[model_type]['name']} achieved 85% accuracy..."
-                        )
-                        
-                        col1, col2 = st.columns([1, 3])
-                        with col1:
-                            if st.button("💾 Save", key='save_ml', type="primary"):
-                                if ml_interpretation.strip():
-                                    save_interpretation(f'ml_{model_type}', ml_interpretation)
-                                    st.success("✓ Saved!")
-                                    st.balloons()
-                                    st.rerun()
-                                else:
-                                    st.warning("⚠️ Please write an interpretation!")
-                        
-                        with col2:
-                            if ml_interpretation.strip():
-                                st.caption(f"📝 {len(ml_interpretation.split())} words")
-        
-        # ML interpretation history - ALWAYS VISIBLE (outside button block)
-        st.markdown("---")
-        st.markdown("### 📚 All ML Interpretation History")
-        
-        conn = sqlite3.connect(DB_FILE)
-        c = conn.cursor()
-        c.execute("SELECT analysis_type, interpretation, timestamp FROM interpretations WHERE analysis_type LIKE 'ml_%' ORDER BY timestamp DESC")
-        all_ml_interps = c.fetchall()
-        conn.close()
-        
-        if all_ml_interps:
-            st.success(f"✅ {len(all_ml_interps)} ML interpretation(s) saved")
-            
-            for idx, (analysis_type, interp, timestamp) in enumerate(all_ml_interps):
-                model_key = analysis_type.replace('ml_', '')
-                model_name = ML_MODELS.get(model_key, {}).get('name', model_key)
-                
-                with st.container():
-                    col1, col2 = st.columns([5, 1])
-                    with col1:
-                        st.markdown(f"**🤖 {model_name}** - {timestamp}")
-                    with col2:
-                        if st.button("🗑️", key=f"del_ml_{idx}"):
-                            conn = sqlite3.connect(DB_FILE)
-                            c = conn.cursor()
-                            c.execute("DELETE FROM interpretations WHERE analysis_type=? AND timestamp=?", 
-                                     (analysis_type, timestamp))
-                            conn.commit()
-                            conn.close()
-                            st.rerun()
-                    
-                    st.info(interp)
-                    if idx < len(all_ml_interps) - 1:
-                        st.markdown("---")
-        else:
-            st.info("💡 No saved ML interpretations yet!")
+                        st.success("✓ Training complete! Take screenshots or download data as needed.")
 
 # ============================================================================
 # SURVEY PAGE
