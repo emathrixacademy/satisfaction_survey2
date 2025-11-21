@@ -1262,10 +1262,10 @@ def admin_panel():
                             word_count = len(interpretation.split())
                             st.caption(f"📝 {word_count} words")
             
-            # Always show ALL saved interpretations at bottom (outside of analysis button)
-            st.markdown("---")
-            st.markdown("### 📚 All Saved Interpretations")
-            st.caption("💡 All your saved analysis notes appear here for easy reference")
+            # Always show ALL saved interpretations at bottom (outside of analysis button
+        st.markdown("---")
+        st.markdown("### 📚 All Saved Interpretations")
+        st.caption("💡 All your saved analysis notes appear here for easy reference")
             
             # Get all saved interpretations
             saved_stats = get_interpretation('statistics')
