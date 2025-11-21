@@ -1,14 +1,14 @@
-# -*- coding: utf-8 -*-
 # ============================================================================
-# TOUCHLESS SATISFACTION SURVEY - ENHANCED EDUCATIONAL VERSION
+# TOUCHLESS SATISFACTION SURVEY - COMPLETE STANDALONE VERSION
 # Features:
-# - Admin panel with password (no default message shown to respondents)
-# - Multiple data cleaning strategies with educational notes
-# - Multiple statistical methods with explanations
-# - Multiple ML models with learning descriptions
-# - Built-in SQLite database
-# - Teachable Machine integration
-# - SIMPLIFIED: No interpretation history bugs - just current session interpretations
+# - Admin panel with password
+# - Teachable Machine model URL configuration
+# - Built-in SQLite database (no Google Sheets needed!)
+# - Data viewing and management
+# - One-click data cleaning
+# - Built-in statistical analysis
+# - Machine learning with visualization
+# - Interpretation notes
 # ============================================================================
 
 import streamlit as st
@@ -28,14 +28,9 @@ try:
     from sklearn.decomposition import PCA
     from sklearn.cluster import KMeans
     from sklearn.linear_model import LogisticRegression
-    from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-    from sklearn.tree import DecisionTreeClassifier
-    from sklearn.svm import SVC
-    from sklearn.naive_bayes import GaussianNB
-    from sklearn.neighbors import KNeighborsClassifier
-    from sklearn.model_selection import train_test_split, cross_val_score
-    from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
-    from sklearn.impute import KNNImputer, SimpleImputer
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.model_selection import train_test_split
+    from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
     import matplotlib.pyplot as plt
     import seaborn as sns
     ML_AVAILABLE = True
@@ -48,12 +43,12 @@ except:
 
 st.set_page_config(
     page_title="Touchless Survey System",
-    page_icon="✋",
+    page_icon="âœ‹",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Default admin password (NOT shown to users)
+# Default admin password (change this!)
 DEFAULT_ADMIN_PASSWORD = "admin123"
 
 # Database file
@@ -70,196 +65,11 @@ SURVEY_QUESTIONS = [
 
 # Gesture mapping
 GESTURE_MAP = {
-    'thumbs_up': {'label': 'Satisfied', 'score': 4, 'emoji': '👍'},
-    'heart_sign': {'label': 'Very Satisfied', 'score': 5, 'emoji': '❤️'},
-    'thumbs_down': {'label': 'Unsatisfied', 'score': 2, 'emoji': '👎'},
-    'waving_finger': {'label': 'Very Unsatisfied', 'score': 1, 'emoji': '☝️'},
-    'closed_fist': {'label': 'No Answer', 'score': None, 'emoji': '✊'}
-}
-
-# ============================================================================
-# EDUCATIONAL CONTENT - IMPUTATION STRATEGIES
-# ============================================================================
-
-IMPUTATION_STRATEGIES = {
-    'mean': {
-        'name': 'Mean Imputation',
-        'description': 'Replaces missing values with the mean (average) of the column.',
-        'when_to_use': 'Best for normally distributed data without outliers.',
-        'pros': 'Simple, fast, preserves the mean of the dataset.',
-        'cons': 'Reduces variance, ignores relationships between variables.',
-        'example': 'If scores are [1, 2, ?, 4, 5], missing value becomes 3.0'
-    },
-    'median': {
-        'name': 'Median Imputation',
-        'description': 'Replaces missing values with the median (middle value) of the column.',
-        'when_to_use': 'Best when data has outliers or is skewed.',
-        'pros': 'Robust to outliers, preserves central tendency.',
-        'cons': 'Reduces variance, ignores relationships between variables.',
-        'example': 'If scores are [1, 2, ?, 4, 100], missing value becomes 3.0 (not affected by 100)'
-    },
-    'mode': {
-        'name': 'Mode Imputation',
-        'description': 'Replaces missing values with the most frequent value.',
-        'when_to_use': 'Best for categorical data or discrete scores.',
-        'pros': 'Preserves the most common response pattern.',
-        'cons': 'Can overrepresent the mode, not suitable for continuous data.',
-        'example': 'If scores are [5, 4, ?, 5, 5, 3], missing value becomes 5'
-    },
-    'forward_fill': {
-        'name': 'Forward Fill (FFill)',
-        'description': 'Fills missing values with the previous valid observation.',
-        'when_to_use': 'Best for time-series data or sequential responses.',
-        'pros': 'Maintains continuity, no calculation needed.',
-        'cons': 'Assumes pattern continues, not suitable for random missing data.',
-        'example': 'If sequence is [3, 4, ?, ?, 5], missing values become [3, 4, 4, 4, 5]'
-    },
-    'backward_fill': {
-        'name': 'Backward Fill (BFill)',
-        'description': 'Fills missing values with the next valid observation.',
-        'when_to_use': 'Best for time-series when future value is more relevant.',
-        'pros': 'Uses future information, maintains continuity.',
-        'cons': 'Assumes reverse pattern, not suitable for random missing data.',
-        'example': 'If sequence is [3, ?, ?, 5, 4], missing values become [3, 5, 5, 5, 4]'
-    },
-    'interpolate': {
-        'name': 'Linear Interpolation',
-        'description': 'Estimates missing values by drawing a line between known values.',
-        'when_to_use': 'Best for continuous data with smooth trends.',
-        'pros': 'Creates smooth transitions, uses surrounding context.',
-        'cons': 'Assumes linear relationship, needs values on both sides.',
-        'example': 'If scores are [2, ?, ?, 6], missing values become [2, 3.33, 4.67, 6]'
-    },
-    'zero': {
-        'name': 'Fill with Zero',
-        'description': 'Replaces all missing values with 0.',
-        'when_to_use': 'When missing means "no response" or "zero activity".',
-        'pros': 'Simple, explicit meaning.',
-        'cons': 'Can distort statistics, may not make sense for ratings.',
-        'example': 'Missing values in satisfaction ratings might not mean "0 satisfaction"'
-    },
-    'constant': {
-        'name': 'Fill with Constant',
-        'description': 'Replaces missing values with a specific constant value (e.g., 3 for neutral).',
-        'when_to_use': 'When you want to assign a specific meaning to missing data.',
-        'pros': 'Explicit control, can represent "neutral" or "no opinion".',
-        'cons': 'Arbitrary choice can bias results.',
-        'example': 'Fill missing satisfaction with 3 (neutral on 1-5 scale)'
-    },
-    'knn': {
-        'name': 'KNN Imputation',
-        'description': 'Uses K-Nearest Neighbors to estimate missing values based on similar responses.',
-        'when_to_use': 'When variables are related and you have enough complete cases.',
-        'pros': 'Considers relationships, more sophisticated.',
-        'cons': 'Computationally expensive, requires complete cases.',
-        'example': 'If respondents with similar Q1-Q3 scores tend to give similar Q4 scores, use those patterns'
-    },
-    'group_mean': {
-        'name': 'Group Mean Imputation',
-        'description': 'Fills missing values with the mean of a specific group (e.g., by organization).',
-        'when_to_use': 'When groups have different response patterns.',
-        'pros': 'Preserves group differences, more contextual.',
-        'cons': 'Requires meaningful grouping variable.',
-        'example': 'Use average score from same organization instead of overall average'
-    }
-}
-
-# ============================================================================
-# EDUCATIONAL CONTENT - STATISTICAL METHODS
-# ============================================================================
-
-STATISTICAL_METHODS = {
-    'descriptive': {
-        'name': 'Descriptive Statistics',
-        'description': 'Basic summary statistics including mean, median, standard deviation, min, max.',
-        'purpose': 'Understand the central tendency and spread of your data.',
-        'what_you_learn': 'Average satisfaction levels, consistency of responses, range of ratings.',
-        'interpretation': 'High mean = good satisfaction. Low std dev = consistent responses.',
-    },
-    'normality': {
-        'name': 'Normality Test (Shapiro-Wilk)',
-        'description': 'Tests if your data follows a normal (bell curve) distribution.',
-        'purpose': 'Determine if you can use parametric statistical tests.',
-        'what_you_learn': 'Whether scores are normally distributed (most scores near middle vs scattered).',
-        'interpretation': 'p > 0.05: Data is normal. p < 0.05: Data is not normal.',
-    },
-    'correlation': {
-        'name': 'Correlation Analysis',
-        'description': 'Measures relationships between different questions.',
-        'purpose': 'Understand which aspects of the workshop are related.',
-        'what_you_learn': 'Do people who rate content high also rate instruction high?',
-        'interpretation': 'Values close to 1: Strong positive relationship. Close to -1: Inverse relationship. Close to 0: No relationship.',
-    }
-}
-
-# ============================================================================
-# EDUCATIONAL CONTENT - MACHINE LEARNING MODELS
-# ============================================================================
-
-ML_MODELS = {
-    'logistic': {
-        'name': 'Logistic Regression',
-        'description': 'Predicts binary outcomes (satisfied vs unsatisfied) using a linear approach.',
-        'purpose': 'Understand which factors predict satisfaction and their importance.',
-        'when_to_use': 'Best for binary classification with interpretable results.',
-        'strengths': 'Fast, interpretable, shows feature importance, works well with small datasets.',
-        'limitations': 'Assumes linear relationships, limited to binary/simple outcomes.',
-        'what_you_learn': 'Which questions are most predictive of overall satisfaction?'
-    },
-    'decision_tree': {
-        'name': 'Decision Tree',
-        'description': 'Creates a tree of decisions to classify satisfaction levels.',
-        'purpose': 'Visual understanding of decision rules for satisfaction.',
-        'when_to_use': 'When you want easily interpretable rules.',
-        'strengths': 'Easy to visualize and explain, handles non-linear patterns.',
-        'limitations': 'Can overfit, unstable with small changes in data.',
-        'what_you_learn': 'Clear if-then rules: "If Q1 < 3 and Q2 < 4, then unsatisfied"'
-    },
-    'random_forest': {
-        'name': 'Random Forest',
-        'description': 'Combines multiple decision trees for more robust predictions.',
-        'purpose': 'Get more accurate predictions by averaging many decision trees.',
-        'when_to_use': 'When you want high accuracy and feature importance.',
-        'strengths': 'Very accurate, robust, provides feature importance, handles outliers well.',
-        'limitations': 'Less interpretable than single tree, slower to train.',
-        'what_you_learn': 'Most important factors for satisfaction with high accuracy.'
-    },
-    'gradient_boosting': {
-        'name': 'Gradient Boosting',
-        'description': 'Builds trees sequentially, each correcting errors of previous ones.',
-        'purpose': 'Achieve highest possible prediction accuracy.',
-        'when_to_use': 'When accuracy is most important and you have enough data.',
-        'strengths': 'Often best performance, captures complex patterns.',
-        'limitations': 'Can overfit, requires careful tuning, slower training.',
-        'what_you_learn': 'Complex patterns in satisfaction with very high accuracy.'
-    },
-    'svm': {
-        'name': 'Support Vector Machine (SVM)',
-        'description': 'Finds the best boundary between satisfied and unsatisfied responses.',
-        'purpose': 'Classify with maximum separation between classes.',
-        'when_to_use': 'When classes are well-separated and you have clean data.',
-        'strengths': 'Effective in high dimensions, memory efficient.',
-        'limitations': 'Slow on large datasets, less interpretable.',
-        'what_you_learn': 'Clear separation boundary between satisfied and unsatisfied.'
-    },
-    'knn': {
-        'name': 'K-Nearest Neighbors (KNN)',
-        'description': 'Predicts satisfaction based on most similar responses.',
-        'purpose': 'Use similarity to past responses for prediction.',
-        'when_to_use': 'When similar response patterns should give similar outcomes.',
-        'strengths': 'Simple concept, no training time, works with irregular patterns.',
-        'limitations': 'Slow prediction, sensitive to scale, needs good K value.',
-        'what_you_learn': '"People with similar responses tend to have similar satisfaction"'
-    },
-    'naive_bayes': {
-        'name': 'Naive Bayes',
-        'description': 'Uses probability theory to predict satisfaction likelihood.',
-        'purpose': 'Fast probabilistic classification.',
-        'when_to_use': 'When you want quick results and probability estimates.',
-        'strengths': 'Very fast, works well with small data, provides probabilities.',
-        'limitations': 'Assumes independence (naive assumption), less accurate.',
-        'what_you_learn': 'Probability of satisfaction given certain responses.'
-    }
+    'thumbs_up': {'label': 'Satisfied', 'score': 4, 'emoji': 'ðŸ‘'},
+    'heart_sign': {'label': 'Very Satisfied', 'score': 5, 'emoji': 'â¤ï¸'},
+    'thumbs_down': {'label': 'Unsatisfied', 'score': 2, 'emoji': 'ðŸ‘Ž'},
+    'waving_finger': {'label': 'Very Unsatisfied', 'score': 1, 'emoji': 'â˜ï¸'},
+    'closed_fist': {'label': 'No Answer', 'score': None, 'emoji': 'âœŠ'}
 }
 
 # ============================================================================
@@ -289,6 +99,13 @@ def init_database():
                  (key TEXT PRIMARY KEY,
                   value TEXT)''')
     
+    # Create interpretations table
+    c.execute('''CREATE TABLE IF NOT EXISTS interpretations
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  analysis_type TEXT,
+                  interpretation TEXT,
+                  timestamp TEXT)''')
+    
     conn.commit()
     conn.close()
 
@@ -313,14 +130,7 @@ def save_response(name, org, responses):
     
     data.append(overall_score)
     
-    c.execute('''INSERT INTO responses (timestamp, name, organization, 
-                  q1_label, q1_score, q1_confidence,
-                  q2_label, q2_score, q2_confidence,
-                  q3_label, q3_score, q3_confidence,
-                  q4_label, q4_score, q4_confidence,
-                  q5_label, q5_score, q5_confidence,
-                  overall_score) 
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', data)
+    c.execute('''INSERT INTO responses VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', data)
     conn.commit()
     conn.close()
 
@@ -348,6 +158,26 @@ def save_setting(key, value):
     conn.commit()
     conn.close()
 
+def save_interpretation(analysis_type, interpretation):
+    """Save interpretation note"""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    c.execute("INSERT INTO interpretations (analysis_type, interpretation, timestamp) VALUES (?, ?, ?)",
+              (analysis_type, interpretation, timestamp))
+    conn.commit()
+    conn.close()
+
+def get_interpretation(analysis_type):
+    """Get latest interpretation for analysis type"""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT interpretation FROM interpretations WHERE analysis_type=? ORDER BY timestamp DESC LIMIT 1",
+              (analysis_type,))
+    result = c.fetchone()
+    conn.close()
+    return result[0] if result else ""
+
 def delete_response(response_id):
     """Delete a response"""
     conn = sqlite3.connect(DB_FILE)
@@ -364,260 +194,126 @@ def clear_all_responses():
     conn.commit()
     conn.close()
 
-def generate_synthetic_data(num_responses, satisfied_pct, diversity):
-    """Generate synthetic survey data for testing"""
-    import random
-    
-    first_names = ['Alex', 'Jordan', 'Taylor', 'Morgan', 'Casey', 'Riley', 'Avery', 'Quinn',
-                   'Jamie', 'Charlie', 'Sam', 'Drew', 'Blake', 'Sage', 'River', 'Dakota']
-    
-    organizations = ['PSITE', 'ACM', 'IEEE', 'Tech Corp', 'Data Labs', 'AI Institute']
-    
-    gestures = {
-        5: {'label': 'Very Satisfied', 'emoji': '❤️'},
-        4: {'label': 'Satisfied', 'emoji': '👍'},
-        2: {'label': 'Unsatisfied', 'emoji': '👎'},
-        1: {'label': 'Very Unsatisfied', 'emoji': '☝️'}
-    }
-    
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    
-    for i in range(num_responses):
-        is_satisfied = random.random() < (satisfied_pct / 100)
-        
-        if diversity == 'Low':
-            if is_satisfied:
-                base_score = random.choice([4, 5])
-                scores = [base_score + random.choice([0, 0, 0, 1, -1]) for _ in range(5)]
-            else:
-                base_score = random.choice([1, 2])
-                scores = [base_score + random.choice([0, 0, 0, 1, -1]) for _ in range(5)]
-        elif diversity == 'Medium':
-            if is_satisfied:
-                scores = [random.choice([3, 4, 4, 4, 5, 5]) for _ in range(5)]
-            else:
-                scores = [random.choice([1, 1, 2, 2, 2, 3]) for _ in range(5)]
-        else:
-            if is_satisfied:
-                scores = [random.randint(3, 5) for _ in range(5)]
-            else:
-                scores = [random.randint(1, 3) for _ in range(5)]
-        
-        scores = [max(1, min(5, s)) for s in scores]
-        
-        if random.random() < 0.1:
-            scores[random.randint(0, 4)] = None
-        
-        name = random.choice(first_names) + str(random.randint(1, 99))
-        org = random.choice(organizations)
-        overall_score = sum(s for s in scores if s is not None) / len([s for s in scores if s is not None])
-        
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
-        data = [timestamp, name, org]
-        
-        for score in scores:
-            if score is None:
-                data.extend(['No Answer', None, random.uniform(0.7, 0.9)])
-            else:
-                gesture_info = gestures[score]
-                data.extend([gesture_info['label'], score, random.uniform(0.85, 0.99)])
-        
-        data.append(overall_score)
-        
-        c.execute('''INSERT INTO responses (timestamp, name, organization, 
-                      q1_label, q1_score, q1_confidence,
-                      q2_label, q2_score, q2_confidence,
-                      q3_label, q3_score, q3_confidence,
-                      q4_label, q4_score, q4_confidence,
-                      q5_label, q5_score, q5_confidence,
-                      overall_score) 
-                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', data)
-    
-    conn.commit()
-    conn.close()
-
-def update_responses_with_cleaned(df_clean):
-    """Update database with cleaned data"""
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    
-    score_cols = ['q1_score', 'q2_score', 'q3_score', 'q4_score', 'q5_score']
-    
-    for idx, row in df_clean.iterrows():
-        scores = [row[col] for col in score_cols if pd.notna(row[col])]
-        overall_score = sum(scores) / len(scores) if scores else None
-        
-        c.execute('''UPDATE responses 
-                     SET q1_score=?, q2_score=?, q3_score=?, q4_score=?, q5_score=?, overall_score=?
-                     WHERE id=?''',
-                  (row['q1_score'], row['q2_score'], row['q3_score'], 
-                   row['q4_score'], row['q5_score'], overall_score, row['id']))
-    
-    conn.commit()
-    conn.close()
-
 # ============================================================================
-# ENHANCED CLEANING FUNCTIONS
+# ANALYSIS FUNCTIONS
 # ============================================================================
 
-def apply_imputation(df, strategy='median', constant_value=3, group_col=None):
-    """Apply selected imputation strategy"""
+def clean_data(df):
+    """Clean survey data"""
     df_clean = df.copy()
+    
+    # Get score columns
     score_cols = ['q1_score', 'q2_score', 'q3_score', 'q4_score', 'q5_score']
     
+    # Replace None with NaN
     for col in score_cols:
         df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce')
     
-    if strategy == 'mean':
-        for col in score_cols:
-            df_clean[col].fillna(df_clean[col].mean(), inplace=True)
-    
-    elif strategy == 'median':
-        for col in score_cols:
-            df_clean[col].fillna(df_clean[col].median(), inplace=True)
-    
-    elif strategy == 'mode':
-        for col in score_cols:
-            mode_val = df_clean[col].mode()
-            if len(mode_val) > 0:
-                df_clean[col].fillna(mode_val[0], inplace=True)
-    
-    elif strategy == 'forward_fill':
-        df_clean[score_cols] = df_clean[score_cols].fillna(method='ffill')
-    
-    elif strategy == 'backward_fill':
-        df_clean[score_cols] = df_clean[score_cols].fillna(method='bfill')
-    
-    elif strategy == 'interpolate':
-        for col in score_cols:
-            df_clean[col] = df_clean[col].interpolate(method='linear')
-    
-    elif strategy == 'zero':
-        df_clean[score_cols] = df_clean[score_cols].fillna(0)
-    
-    elif strategy == 'constant':
-        df_clean[score_cols] = df_clean[score_cols].fillna(constant_value)
-    
-    elif strategy == 'knn':
-        if ML_AVAILABLE:
-            imputer = KNNImputer(n_neighbors=3)
-            df_clean[score_cols] = imputer.fit_transform(df_clean[score_cols])
-    
-    elif strategy == 'group_mean' and group_col and group_col in df_clean.columns:
-        for col in score_cols:
-            df_clean[col] = df_clean.groupby(group_col)[col].transform(
-                lambda x: x.fillna(x.mean())
-            )
-    
+    # Impute missing values with median
     for col in score_cols:
-        if df_clean[col].isnull().any():
-            median = df_clean[col].median()
-            df_clean[col].fillna(median if pd.notna(median) else 3.0, inplace=True)
+        median = df_clean[col].median()
+        if pd.notna(median):
+            df_clean[col].fillna(median, inplace=True)
+        else:
+            df_clean[col].fillna(3.0, inplace=True)
     
     return df_clean
 
-# ============================================================================
-# ENHANCED ANALYSIS FUNCTIONS
-# ============================================================================
-
-def perform_statistical_analysis(df, methods=['descriptive']):
-    """Perform selected statistical analyses"""
+def perform_statistical_analysis(df):
+    """Perform statistical tests"""
     score_cols = ['q1_score', 'q2_score', 'q3_score', 'q4_score', 'q5_score']
+    
     results = {}
     
-    if 'descriptive' in methods:
-        results['descriptive'] = {
-            'mean': df[score_cols].mean().mean(),
-            'std': df[score_cols].std().mean(),
-            'median': df[score_cols].median().median(),
-            'per_question': {}
-        }
-        for i, col in enumerate(score_cols, 1):
-            results['descriptive']['per_question'][f'Q{i}'] = {
-                'mean': df[col].mean(),
-                'std': df[col].std(),
-                'median': df[col].median(),
-                'min': df[col].min(),
-                'max': df[col].max()
-            }
+    # Basic statistics
+    results['mean'] = df[score_cols].mean().mean()
+    results['std'] = df[score_cols].std().mean()
+    results['median'] = df[score_cols].median().median()
     
-    if 'normality' in methods and len(df) >= 3:
+    # Per-question stats
+    results['per_question'] = {}
+    for i, col in enumerate(score_cols, 1):
+        results['per_question'][f'Q{i}'] = {
+            'mean': df[col].mean(),
+            'std': df[col].std(),
+            'median': df[col].median(),
+            'min': df[col].min(),
+            'max': df[col].max()
+        }
+    
+    # Normality tests (if enough data)
+    if len(df) >= 3:
         results['normality'] = {}
         for i, col in enumerate(score_cols, 1):
             if df[col].std() > 0:
                 try:
                     stat, p = stats.shapiro(df[col])
-                    results['normality'][f'Q{i}'] = {
-                        'statistic': stat,
-                        'p_value': p,
-                        'is_normal': p > 0.05,
-                        'interpretation': f"Data is {'normal' if p > 0.05 else 'not normal'} (p={p:.4f})"
-                    }
+                    results['normality'][f'Q{i}'] = {'statistic': stat, 'p_value': p, 'normal': p > 0.05}
                 except:
                     results['normality'][f'Q{i}'] = {'error': 'Cannot compute'}
     
-    if 'correlation' in methods and len(df) >= 3:
+    # Correlation matrix
+    if len(df) >= 3:
         results['correlation'] = df[score_cols].corr()
     
     return results
 
-def train_ml_model(df, model_type='logistic'):
-    """Train selected ML model"""
+def perform_ml_analysis(df):
+    """Perform machine learning analysis"""
     score_cols = ['q1_score', 'q2_score', 'q3_score', 'q4_score', 'q5_score']
     
+    results = {}
+    
+    # Prepare data
     X = df[score_cols].values
     y = (df['overall_score'] >= 4).astype(int).values
     
-    unique_classes, class_counts = np.unique(y, return_counts=True)
+    # Feature scaling
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
     
-    if len(unique_classes) < 2:
-        satisfied_count = (y == 1).sum()
-        unsatisfied_count = (y == 0).sum()
-        return {
-            'error': f'Need both satisfied AND unsatisfied responses for ML training.\n\n'
-                    f'Current data:\n'
-                    f'  • Satisfied (score ≥ 4): {satisfied_count} responses\n'
-                    f'  • Unsatisfied (score < 4): {unsatisfied_count} responses\n\n'
-                    f'💡 Tip: To use ML, you need at least 1 response in each category.'
+    results['n_samples'] = len(df)
+    results['n_features'] = len(score_cols)
+    
+    # PCA (if enough samples)
+    if len(df) >= 2:
+        n_components = min(len(df) - 1, len(score_cols))
+        if n_components >= 1:
+            pca = PCA(n_components=n_components)
+            X_pca = pca.fit_transform(X_scaled)
+            results['pca'] = {
+                'explained_variance': pca.explained_variance_ratio_.tolist(),
+                'cumulative_variance': np.cumsum(pca.explained_variance_ratio_).tolist()
+            }
+    
+    # Clustering (if enough samples)
+    if len(df) >= 3:
+        kmeans = KMeans(n_clusters=2, random_state=42, n_init=10)
+        clusters = kmeans.fit_predict(X_scaled)
+        results['clustering'] = {
+            'labels': clusters.tolist(),
+            'n_clusters': 2
         }
     
-    test_size = 0.3 if len(df) >= 10 else 0.2
-    if len(df) < 5:
-        test_size = 1 / len(df)
-    
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42, stratify=y)
-    
-    models = {
-        'logistic': LogisticRegression(random_state=42, max_iter=1000),
-        'decision_tree': DecisionTreeClassifier(random_state=42, max_depth=4),
-        'random_forest': RandomForestClassifier(random_state=42, n_estimators=100),
-        'gradient_boosting': GradientBoostingClassifier(random_state=42),
-        'svm': SVC(random_state=42, probability=True),
-        'knn': KNeighborsClassifier(n_neighbors=min(3, len(df)-1)),
-        'naive_bayes': GaussianNB()
-    }
-    
-    model = models.get(model_type, LogisticRegression(random_state=42))
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_test)
-    
-    results = {
-        'model_type': model_type,
-        'accuracy': accuracy_score(y_test, y_pred),
-        'precision': precision_score(y_test, y_pred, zero_division=0),
-        'recall': recall_score(y_test, y_pred, zero_division=0),
-        'f1': f1_score(y_test, y_pred, zero_division=0),
-        'confusion_matrix': confusion_matrix(y_test, y_pred).tolist()
-    }
-    
-    if hasattr(model, 'feature_importances_'):
-        results['feature_importance'] = dict(zip(['Q1', 'Q2', 'Q3', 'Q4', 'Q5'], 
-                                                  model.feature_importances_.tolist()))
-    elif hasattr(model, 'coef_'):
-        results['feature_importance'] = dict(zip(['Q1', 'Q2', 'Q3', 'Q4', 'Q5'], 
-                                                  model.coef_[0].tolist()))
+    # Classification (if enough samples and both classes)
+    if len(df) >= 5 and len(np.unique(y)) > 1:
+        try:
+            X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.3, random_state=42)
+            
+            # Logistic Regression
+            lr = LogisticRegression(random_state=42, max_iter=1000)
+            lr.fit(X_train, y_train)
+            y_pred = lr.predict(X_test)
+            
+            results['classification'] = {
+                'accuracy': accuracy_score(y_test, y_pred),
+                'precision': precision_score(y_test, y_pred, zero_division=0),
+                'recall': recall_score(y_test, y_pred, zero_division=0),
+                'f1': f1_score(y_test, y_pred, zero_division=0),
+                'feature_importance': dict(zip(['Q1', 'Q2', 'Q3', 'Q4', 'Q5'], lr.coef_[0].tolist()))
+            }
+        except:
+            pass
     
     return results
 
@@ -628,6 +324,7 @@ def plot_basic_stats(df):
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
     fig.suptitle('Survey Statistics Dashboard', fontsize=14, fontweight='bold')
     
+    # 1. Average scores
     means = [df[col].mean() for col in score_cols]
     colors = ['#2ecc71' if m>=4 else '#f39c12' if m>=3 else '#e74c3c' for m in means]
     axes[0,0].bar(range(5), means, color=colors, edgecolor='black', alpha=0.7)
@@ -637,14 +334,17 @@ def plot_basic_stats(df):
     axes[0,0].set_xticklabels(['Q1', 'Q2', 'Q3', 'Q4', 'Q5'])
     axes[0,0].set_ylim(0, 5.5)
     
+    # 2. Distribution
     all_scores = df[score_cols].values.flatten()
     axes[0,1].hist(all_scores, bins=5, edgecolor='black', color='#3498db', alpha=0.7)
     axes[0,1].set_title('Score Distribution')
     axes[0,1].set_xlabel('Score')
     
+    # 3. Box plot
     df[score_cols].boxplot(ax=axes[1,0])
     axes[1,0].set_title('Score Spread by Question')
     
+    # 4. Satisfaction rate
     satisfied = (df['overall_score'] >= 4).sum()
     not_satisfied = (df['overall_score'] < 4).sum()
     axes[1,1].bar(['Not Satisfied', 'Satisfied'], [not_satisfied, satisfied],
@@ -656,11 +356,12 @@ def plot_basic_stats(df):
     return fig
 
 # ============================================================================
-# SIMPLE PREDICTION
+# SIMPLE PREDICTION (Replace with Teachable Machine)
 # ============================================================================
 
 def simple_predict(image):
     """Simple prediction - replace with Teachable Machine API call"""
+    # TODO: Integrate with Teachable Machine model
     import random
     gestures = list(GESTURE_MAP.keys())
     gesture = random.choice(gestures)
@@ -671,59 +372,50 @@ def simple_predict(image):
 # ADMIN PANEL
 # ============================================================================
 
-def show_method_info(method_dict, method_key):
-    """Display educational information about a method"""
-    info = method_dict[method_key]
-    with st.expander(f"📚 Learn about {info['name']}", expanded=False):
-        st.markdown(f"**Description:** {info['description']}")
-        st.markdown(f"**{list(info.keys())[3]}:** {list(info.values())[3]}")
-        st.markdown(f"**{list(info.keys())[4]}:** {list(info.values())[4]}")
-        if len(info) > 5:
-            st.markdown(f"**{list(info.keys())[5]}:** {list(info.values())[5]}")
-        if 'example' in info:
-            st.info(f"💡 Example: {info['example']}")
-
 def admin_panel():
-    """Enhanced admin panel with educational features"""
-    st.title("🔧 Admin Panel")
+    """Admin panel for configuration and data management"""
+    st.title("ðŸ”§ Admin Panel")
     
+    # Check admin authentication
     if 'admin_authenticated' not in st.session_state:
         st.session_state.admin_authenticated = False
     
     if not st.session_state.admin_authenticated:
-        st.subheader("🔐 Admin Login")
-        password = st.text_input("Enter Admin Password:", type="password", key="admin_pw")
+        st.subheader("ðŸ” Admin Login")
+        password = st.text_input("Enter Admin Password:", type="password")
         
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            if st.button("Login", type="primary"):
-                stored_password = get_setting('admin_password', DEFAULT_ADMIN_PASSWORD)
-                if password == stored_password:
-                    st.session_state.admin_authenticated = True
-                    st.success("✓ Authenticated!")
-                    st.rerun()
-                else:
-                    st.error("✗ Incorrect password")
+        if st.button("Login"):
+            stored_password = get_setting('admin_password', DEFAULT_ADMIN_PASSWORD)
+            if password == stored_password:
+                st.session_state.admin_authenticated = True
+                st.success("âœ“ Authenticated!")
+                st.rerun()
+            else:
+                st.error("âœ— Incorrect password")
         
+        st.info("Default password: admin123")
         return
     
-    if st.button("🚪 Logout"):
+    # Logout button
+    if st.button("ðŸšª Logout"):
         st.session_state.admin_authenticated = False
         st.rerun()
     
+    # Tabs for different admin functions
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "⚙️ Settings", 
-        "📊 View Data", 
-        "🧹 Clean Data", 
-        "📈 Statistics", 
-        "🤖 Machine Learning"
+        "âš™ï¸ Settings", 
+        "ðŸ“Š View Data", 
+        "ðŸ§¹ Clean Data", 
+        "ðŸ“ˆ Statistics", 
+        "ðŸ¤– Machine Learning"
     ])
     
     # ========== TAB 1: SETTINGS ==========
     with tab1:
         st.subheader("Application Settings")
         
-        st.markdown("### 🎯 Teachable Machine Model")
+        # Teachable Machine Model URL
+        st.markdown("### ðŸŽ¯ Teachable Machine Model")
         current_model_url = get_setting('model_url', '')
         model_url = st.text_input(
             "Teachable Machine Shareable Link:",
@@ -731,31 +423,33 @@ def admin_panel():
             help="Paste your Teachable Machine model share link here"
         )
         
-        if st.button("💾 Save Model URL"):
+        if st.button("ðŸ’¾ Save Model URL"):
             save_setting('model_url', model_url)
-            st.success("✓ Model URL saved!")
+            st.success("âœ“ Model URL saved!")
+            st.info(f"Model: {model_url}")
         
-        st.markdown("### 🔑 Change Admin Password")
-        new_password = st.text_input("New Password:", type="password", key="new_pw")
-        confirm_password = st.text_input("Confirm Password:", type="password", key="confirm_pw")
+        # Admin Password
+        st.markdown("### ðŸ”‘ Change Admin Password")
+        new_password = st.text_input("New Password:", type="password")
+        confirm_password = st.text_input("Confirm Password:", type="password")
         
-        if st.button("🔄 Update Password"):
-            if new_password and new_password == confirm_password:
+        if st.button("ðŸ”„ Update Password"):
+            if new_password == confirm_password:
                 save_setting('admin_password', new_password)
-                st.success("✓ Password updated successfully!")
-                st.info("⚠️ Remember your new password - there is no recovery option!")
+                st.success("âœ“ Password updated!")
             else:
-                st.error("✗ Passwords don't match or are empty")
+                st.error("âœ— Passwords don't match")
         
-        st.markdown("### 📋 Survey Settings")
+        # Survey Settings
+        st.markdown("### ðŸ“‹ Survey Settings")
         survey_title = st.text_input("Survey Title:", value=get_setting('survey_title', 'Touchless Satisfaction Survey'))
-        if st.button("💾 Save Title"):
+        if st.button("ðŸ’¾ Save Title"):
             save_setting('survey_title', survey_title)
-            st.success("✓ Title saved!")
+            st.success("âœ“ Title saved!")
     
     # ========== TAB 2: VIEW DATA ==========
     with tab2:
-        st.subheader("📊 Survey Responses")
+        st.subheader("ðŸ“Š Survey Responses")
         
         df = get_all_responses()
         
@@ -764,60 +458,40 @@ def admin_panel():
         else:
             st.success(f"Total Responses: {len(df)}")
             
+            # Display data
             st.dataframe(df, use_container_width=True)
             
+            # Download button
             csv = df.to_csv(index=False)
             st.download_button(
-                "📥 Download CSV",
+                "ðŸ“¥ Download CSV",
                 csv,
                 "survey_responses.csv",
                 "text/csv",
                 key='download-csv'
             )
             
-            st.markdown("### 🗑️ Data Management")
+            # Delete options
+            st.markdown("### ðŸ—‘ï¸ Data Management")
             col1, col2 = st.columns(2)
             
             with col1:
                 response_id = st.number_input("Delete Response ID:", min_value=1, step=1)
-                if st.button("🗑️ Delete Response"):
+                if st.button("ðŸ—‘ï¸ Delete Response"):
                     delete_response(response_id)
-                    st.success(f"✓ Deleted response {response_id}")
+                    st.success(f"âœ“ Deleted response {response_id}")
                     st.rerun()
             
             with col2:
-                if st.button("⚠️ Clear All Data", type="secondary"):
+                if st.button("âš ï¸ Clear All Data", type="secondary"):
                     if st.checkbox("Confirm deletion"):
                         clear_all_responses()
-                        st.success("✓ All data cleared")
+                        st.success("âœ“ All data cleared")
                         st.rerun()
-        
-        st.markdown("---")
-        st.markdown("### 🧪 Testing & Data Import")
-        
-        st.markdown("#### Generate Synthetic Survey Data")
-        st.info("💡 Create fake survey responses for testing")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            n_responses = st.number_input("Number of responses:", min_value=5, max_value=100, value=20)
-        
-        with col2:
-            satisfaction_rate = st.slider("Satisfaction rate (%):", 0, 100, 60)
-        
-        with col3:
-            diversity = st.selectbox("Score diversity:", ['Low', 'Medium', 'High'])
-        
-        if st.button("🎲 Generate Data", type="primary"):
-            generate_synthetic_data(n_responses, satisfaction_rate, diversity)
-            st.success(f"✓ Generated {n_responses} synthetic responses!")
-            st.balloons()
-            st.rerun()
     
     # ========== TAB 3: CLEAN DATA ==========
     with tab3:
-        st.subheader("🧹 Data Cleaning with Multiple Strategies")
+        st.subheader("ðŸ§¹ Data Cleaning")
         
         df = get_all_responses()
         
@@ -828,233 +502,159 @@ def admin_panel():
             
             score_cols = ['q1_score', 'q2_score', 'q3_score', 'q4_score', 'q5_score']
             
+            # Show missing values
             missing_counts = {}
             for col in score_cols:
                 missing = df[col].isnull().sum()
                 missing_counts[col] = missing
             
-            total_missing = sum(missing_counts.values())
+            if sum(missing_counts.values()) > 0:
+                st.warning(f"Found {sum(missing_counts.values())} missing values")
+                for col, count in missing_counts.items():
+                    if count > 0:
+                        st.write(f"  - {col}: {count} missing")
+            else:
+                st.success("âœ“ No missing values!")
             
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                if total_missing > 0:
-                    st.warning(f"⚠️ Found {total_missing} missing values")
-                    for col, count in missing_counts.items():
-                        if count > 0:
-                            st.write(f"  - {col}: {count} missing")
-                else:
-                    st.success("✓ No missing values!")
-            
-            with col2:
-                st.metric("Total Missing", total_missing)
-                st.metric("Total Responses", len(df))
-            
-            st.markdown("---")
-            st.markdown("### 🎓 Select Imputation Strategy")
-            
-            strategy = st.selectbox(
-                "Choose a strategy:",
-                options=list(IMPUTATION_STRATEGIES.keys()),
-                format_func=lambda x: IMPUTATION_STRATEGIES[x]['name']
-            )
-            
-            show_method_info(IMPUTATION_STRATEGIES, strategy)
-            
-            constant_value = 3
-            group_col = None
-            
-            if strategy == 'constant':
-                constant_value = st.number_input("Constant value:", min_value=1, max_value=5, value=3)
-            
-            if strategy == 'group_mean':
-                if 'organization' in df.columns:
-                    group_col = 'organization'
-                    st.info(f"📊 Will use group means by: {group_col}")
-            
-            st.markdown("---")
+            # Cleaning options
+            st.markdown("### Cleaning Strategies")
             
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                if st.button("🔄 Preview Cleaned Data", type="primary"):
-                    st.session_state.cleaned_df = apply_imputation(df, strategy, constant_value, group_col)
-                    st.session_state.cleaning_applied = True
-                    st.success(f"✓ Applied {IMPUTATION_STRATEGIES[strategy]['name']}!")
+                if st.button("ðŸ”„ Impute with Median"):
+                    df_clean = clean_data(df)
+                    st.success("âœ“ Data cleaned with median imputation")
+                    st.dataframe(df_clean[score_cols].describe())
             
             with col2:
-                if st.button("💾 Save to Database"):
-                    if 'cleaned_df' in st.session_state and st.session_state.get('cleaning_applied'):
-                        update_responses_with_cleaned(st.session_state.cleaned_df)
-                        st.success("✓ Cleaned data saved!")
-                        del st.session_state.cleaned_df
-                        st.session_state.cleaning_applied = False
-                        st.rerun()
-                    else:
-                        st.warning("⚠️ Please preview cleaned data first!")
+                if st.button("ðŸ“Š Show Statistics"):
+                    st.write("Before cleaning:")
+                    st.dataframe(df[score_cols].describe())
             
             with col3:
-                if 'cleaned_df' in st.session_state and st.session_state.get('cleaning_applied'):
-                    csv = st.session_state.cleaned_df.to_csv(index=False)
+                if st.button("ðŸ’¾ Export Cleaned Data"):
+                    df_clean = clean_data(df)
+                    csv = df_clean.to_csv(index=False)
                     st.download_button(
-                        "📥 Download CSV",
+                        "Download Cleaned CSV",
                         csv,
-                        f"cleaned_data_{strategy}.csv",
-                        "text/csv",
-                        key='download-cleaned'
+                        "cleaned_data.csv",
+                        "text/csv"
                     )
-            
-            if 'cleaned_df' in st.session_state and st.session_state.get('cleaning_applied'):
-                st.markdown("---")
-                st.markdown("### 📊 Data Comparison")
-                
-                tab_before, tab_after, tab_stats = st.tabs(["Before", "After", "Statistics"])
-                
-                with tab_before:
-                    st.markdown("#### Original Data")
-                    st.dataframe(df[['id', 'name', 'organization'] + score_cols + ['overall_score']])
-                
-                with tab_after:
-                    st.markdown("#### Cleaned Data")
-                    st.dataframe(st.session_state.cleaned_df[['id', 'name', 'organization'] + score_cols + ['overall_score']])
-                
-                with tab_stats:
-                    st.markdown("#### Statistical Comparison")
-                    
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        st.markdown("**Before**")
-                        st.dataframe(df[score_cols].describe())
-                    
-                    with col2:
-                        st.markdown("**After**")
-                        st.dataframe(st.session_state.cleaned_df[score_cols].describe())
     
-    # ========== TAB 4: STATISTICS (SIMPLIFIED - NO INTERPRETATION PERSISTENCE) ==========
+    # ========== TAB 4: STATISTICS ==========
     with tab4:
-        st.subheader("📈 Statistical Analysis")
+        st.subheader("ðŸ“ˆ Statistical Analysis")
         
         df = get_all_responses()
         
         if len(df) < 2:
             st.info("Need at least 2 responses for statistical analysis")
         else:
-            st.markdown("### 🎓 Select Statistical Methods")
-            
-            methods = st.multiselect(
-                "Choose methods to apply:",
-                options=list(STATISTICAL_METHODS.keys()),
-                default=['descriptive', 'correlation'],
-                format_func=lambda x: STATISTICAL_METHODS[x]['name']
-            )
-            
-            for method in methods:
-                show_method_info(STATISTICAL_METHODS, method)
-            
-            if st.button("🔬 Run Statistical Analysis", type="primary"):
+            if st.button("ðŸ”¬ Run Statistical Analysis"):
                 with st.spinner("Analyzing..."):
-                    df_clean = apply_imputation(df, 'median')
-                    results = perform_statistical_analysis(df_clean, methods)
+                    df_clean = clean_data(df)
+                    results = perform_statistical_analysis(df_clean)
                     
-                    if 'descriptive' in methods and 'descriptive' in results:
-                        st.markdown("### 📊 Descriptive Statistics")
-                        col1, col2, col3 = st.columns(3)
-                        with col1:
-                            st.metric("Overall Mean", f"{results['descriptive']['mean']:.2f}/5.0")
-                        with col2:
-                            st.metric("Standard Deviation", f"{results['descriptive']['std']:.2f}")
-                        with col3:
-                            st.metric("Median", f"{results['descriptive']['median']:.2f}")
-                        
-                        st.markdown("#### Per-Question Statistics")
-                        stats_df = pd.DataFrame(results['descriptive']['per_question']).T
-                        st.dataframe(stats_df)
+                    # Display results
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Overall Mean", f"{results['mean']:.2f}/5.0")
+                    with col2:
+                        st.metric("Standard Deviation", f"{results['std']:.2f}")
+                    with col3:
+                        st.metric("Median", f"{results['median']:.2f}")
                     
-                    if 'normality' in methods and 'normality' in results:
-                        st.markdown("### 🔔 Normality Tests")
-                        for q, result in results['normality'].items():
-                            if 'interpretation' in result:
-                                st.write(f"**{q}**: {result['interpretation']}")
+                    # Per-question stats
+                    st.markdown("### Per-Question Statistics")
+                    stats_df = pd.DataFrame(results['per_question']).T
+                    st.dataframe(stats_df)
                     
-                    if 'correlation' in methods and 'correlation' in results:
-                        st.markdown("### 🔗 Correlation Matrix")
-                        st.dataframe(results['correlation'].style.background_gradient(cmap='coolwarm', vmin=-1, vmax=1))
-                    
-                    st.markdown("### 📊 Visualizations")
+                    # Visualizations
+                    st.markdown("### Visualizations")
                     fig = plot_basic_stats(df_clean)
                     st.pyplot(fig)
                     
-                    st.success("✓ Analysis complete! Download results or take screenshots as needed.")
+                    # Interpretation box
+                    st.markdown("### ðŸ“ Your Interpretation")
+                    interpretation = st.text_area(
+                        "Add your interpretation of the statistical results:",
+                        value=get_interpretation('statistics'),
+                        height=150
+                    )
+                    if st.button("ðŸ’¾ Save Interpretation"):
+                        save_interpretation('statistics', interpretation)
+                        st.success("âœ“ Interpretation saved!")
     
-    # ========== TAB 5: MACHINE LEARNING (SIMPLIFIED - NO INTERPRETATION PERSISTENCE) ==========
+    # ========== TAB 5: MACHINE LEARNING ==========
     with tab5:
-        st.subheader("🤖 Machine Learning Analysis")
+        st.subheader("ðŸ¤– Machine Learning Analysis")
         
         if not ML_AVAILABLE:
-            st.error("ML libraries not available.")
+            st.error("ML libraries not available. Install scikit-learn, scipy, matplotlib, seaborn")
             return
         
         df = get_all_responses()
         
         if len(df) < 3:
-            st.info(f"Need at least 3 responses for ML. Current: {len(df)}")
+            st.info("Need at least 3 responses for ML analysis")
+            st.write(f"Current responses: {len(df)}")
         else:
-            st.markdown("### 🎓 Select Machine Learning Model")
-            
-            model_type = st.selectbox(
-                "Choose a model:",
-                options=list(ML_MODELS.keys()),
-                format_func=lambda x: ML_MODELS[x]['name']
-            )
-            
-            show_method_info(ML_MODELS, model_type)
-            
-            if st.button("🚀 Train Model", type="primary"):
-                with st.spinner(f"Training {ML_MODELS[model_type]['name']}..."):
-                    df_clean = apply_imputation(df, 'median')
-                    results = train_ml_model(df_clean, model_type)
+            if st.button("ðŸš€ Run ML Analysis"):
+                with st.spinner("Training models..."):
+                    df_clean = clean_data(df)
+                    results = perform_ml_analysis(df_clean)
                     
-                    if 'error' in results:
-                        st.error(results['error'])
-                    else:
-                        st.markdown("### 📊 Model Performance")
+                    # Display results
+                    st.markdown("### ðŸ“Š Dataset Info")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("Samples", results['n_samples'])
+                    with col2:
+                        st.metric("Features", results['n_features'])
+                    
+                    # PCA Results
+                    if 'pca' in results:
+                        st.markdown("### ðŸ” Principal Component Analysis")
+                        pca_df = pd.DataFrame({
+                            'Component': [f'PC{i+1}' for i in range(len(results['pca']['explained_variance']))],
+                            'Explained Variance': results['pca']['explained_variance'],
+                            'Cumulative Variance': results['pca']['cumulative_variance']
+                        })
+                        st.dataframe(pca_df)
+                    
+                    # Classification Results
+                    if 'classification' in results:
+                        st.markdown("### ðŸŽ¯ Classification Model Performance")
+                        metrics_df = pd.DataFrame({
+                            'Metric': ['Accuracy', 'Precision', 'Recall', 'F1-Score'],
+                            'Value': [
+                                results['classification']['accuracy'],
+                                results['classification']['precision'],
+                                results['classification']['recall'],
+                                results['classification']['f1']
+                            ]
+                        })
+                        st.dataframe(metrics_df)
                         
-                        col1, col2, col3, col4 = st.columns(4)
-                        with col1:
-                            st.metric("Accuracy", f"{results['accuracy']:.2%}")
-                        with col2:
-                            st.metric("Precision", f"{results['precision']:.2%}")
-                        with col3:
-                            st.metric("Recall", f"{results['recall']:.2%}")
-                        with col4:
-                            st.metric("F1-Score", f"{results['f1']:.2%}")
-                        
-                        if 'feature_importance' in results:
-                            st.markdown("### 📊 Feature Importance")
-                            importance_df = pd.DataFrame(
-                                results['feature_importance'].items(),
-                                columns=['Question', 'Importance']
-                            ).sort_values('Importance', ascending=False)
-                            
-                            fig, ax = plt.subplots(figsize=(10, 5))
-                            ax.barh(importance_df['Question'], importance_df['Importance'])
-                            ax.set_xlabel('Importance')
-                            ax.set_title(f'Feature Importance - {ML_MODELS[model_type]["name"]}')
-                            st.pyplot(fig)
-                            
-                            st.dataframe(importance_df)
-                        
-                        if 'confusion_matrix' in results:
-                            st.markdown("### 🎯 Confusion Matrix")
-                            cm = np.array(results['confusion_matrix'])
-                            fig, ax = plt.subplots(figsize=(8, 6))
-                            sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax)
-                            ax.set_xlabel('Predicted')
-                            ax.set_ylabel('Actual')
-                            ax.set_title('Confusion Matrix')
-                            st.pyplot(fig)
-                        
-                        st.success("✓ Training complete! Take screenshots or download data as needed.")
+                        st.markdown("### ðŸ“Š Feature Importance")
+                        importance_df = pd.DataFrame(
+                            results['classification']['feature_importance'].items(),
+                            columns=['Question', 'Importance']
+                        ).sort_values('Importance', ascending=False)
+                        st.dataframe(importance_df)
+                    
+                    # Interpretation box
+                    st.markdown("### ðŸ“ Your ML Interpretation")
+                    ml_interpretation = st.text_area(
+                        "Add your interpretation of the ML results:",
+                        value=get_interpretation('machine_learning'),
+                        height=150
+                    )
+                    if st.button("ðŸ’¾ Save ML Interpretation"):
+                        save_interpretation('machine_learning', ml_interpretation)
+                        st.success("âœ“ Interpretation saved!")
 
 # ============================================================================
 # SURVEY PAGE
@@ -1063,28 +663,31 @@ def admin_panel():
 def survey_page():
     """Main survey interface"""
     survey_title = get_setting('survey_title', 'Touchless Satisfaction Survey')
-    st.title(f"✋ {survey_title}")
+    st.title(f"âœ‹ {survey_title}")
     
+    # Sidebar
     with st.sidebar:
-        st.header("📋 Instructions")
+        st.header("ðŸ“‹ Instructions")
         st.markdown("""
         **Gesture Guide:**
         
-        ❤️ Heart = Very Satisfied (5)
-        👍 Thumbs Up = Satisfied (4)  
-        👎 Thumbs Down = Unsatisfied (2)
-        ☝️ Waving = Very Unsatisfied (1)
-        ✊ Fist = No Answer
+        â¤ï¸ Heart = Very Satisfied (5)
+        ðŸ‘ Thumbs Up = Satisfied (4)  
+        ðŸ‘Ž Thumbs Down = Unsatisfied (2)
+        â˜ï¸ Waving = Very Unsatisfied (1)
+        âœŠ Fist = No Answer
         """)
         
         st.info("Show clear hand gestures for best results!")
     
+    # Initialize session
     if 'started' not in st.session_state:
         st.session_state.started = False
         st.session_state.current_q = 0
         st.session_state.responses = []
         st.session_state.completed = False
     
+    # Start screen
     if not st.session_state.started:
         st.markdown("## Welcome!")
         
@@ -1094,16 +697,16 @@ def survey_page():
         with col2:
             org = st.text_input("Organization:")
         
-        if st.button("🚀 Start Survey", type="primary"):
+        if st.button("ðŸš€ Start Survey", type="primary"):
             st.session_state.name = name or "Anonymous"
             st.session_state.org = org or "N/A"
             st.session_state.started = True
             st.rerun()
         return
     
+    # Completed screen
     if st.session_state.completed:
-        st.success("✅ Survey Complete!")
-        st.balloons()
+        st.success("âœ… Survey Complete!")
         
         st.markdown("## Your Responses")
         
@@ -1119,16 +722,9 @@ def survey_page():
         scores = [r['score'] for r in st.session_state.responses if r['score']]
         if scores:
             avg_score = sum(scores)/len(scores)
-            st.metric("Your Average Score", f"{avg_score:.2f}/5.0")
-            
-            if avg_score >= 4:
-                st.success("🎉 Thank you for your positive feedback!")
-            elif avg_score >= 3:
-                st.info("👍 Thank you for your feedback!")
-            else:
-                st.warning("We appreciate your feedback and will improve!")
+            st.metric("Average Score", f"{avg_score:.2f}/5.0")
         
-        if st.button("📝 Submit Another Response"):
+        if st.button("ðŸ“ New Response"):
             st.session_state.started = False
             st.session_state.current_q = 0
             st.session_state.responses = []
@@ -1136,6 +732,7 @@ def survey_page():
             st.rerun()
         return
     
+    # Survey in progress
     current_q = st.session_state.current_q
     total_q = len(SURVEY_QUESTIONS)
     
@@ -1160,7 +757,7 @@ def survey_page():
             st.success(f"Detected: {info['emoji']} {info['label']}")
             st.info(f"Confidence: {confidence:.1%}")
             
-            if st.button("✅ Confirm", type="primary"):
+            if st.button("âœ… Confirm", type="primary"):
                 st.session_state.responses.append({
                     'label': info['label'],
                     'score': info['score'],
@@ -1172,11 +769,14 @@ def survey_page():
                     st.rerun()
                 else:
                     st.session_state.completed = True
+                    
+                    # Save to database
                     save_response(
                         st.session_state.name,
                         st.session_state.org,
                         st.session_state.responses
                     )
+                    
                     st.rerun()
     
     with col2:
@@ -1189,17 +789,20 @@ def survey_page():
 # ============================================================================
 
 def main():
+    # Initialize database
     init_database()
     
+    # Sidebar navigation
     with st.sidebar:
         st.markdown("---")
         page = st.radio(
             "Navigation",
-            ["📝 Survey", "🔧 Admin Panel"],
+            ["ðŸ“ Survey", "ðŸ”§ Admin Panel"],
             label_visibility="collapsed"
         )
     
-    if page == "📝 Survey":
+    # Route to appropriate page
+    if page == "ðŸ“ Survey":
         survey_page()
     else:
         admin_panel()
